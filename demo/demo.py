@@ -283,6 +283,7 @@ class MarkdownPreviewWidget(QTextEdit):
             self.setHtml(f"<p style='color: #f44336;'>Error in preview: {str(e)}</p>")
 
 
+
 class ConversionWorker(QThread):
     """Worker thread for handling the conversion process"""
     finished = Signal(bool, str)
@@ -302,7 +303,8 @@ class ConversionWorker(QThread):
             self.progress.emit(10)
             
             # Clean the markdown text
-            self.md_text = re.sub("---(.|\n)*---", "", self.md_text)
+            self.md_text = re.sub(r'^---\n([\s\S]*?)\n---\n', '', self.md_text, flags=re.MULTILINE)
+
             self.progress.emit(30)
             
             # Convert markdown to HTML
@@ -330,6 +332,7 @@ class ConversionWorker(QThread):
             
         except Exception as e:
             self.finished.emit(False, f"Error: {str(e)}")
+
 
 
 class MainWindow(QMainWindow):
@@ -1144,7 +1147,10 @@ def convert_element_to_hwpml(element):
     elif element.name == 'pre':
         return convert_code_block_to_hwpml(element)
     elif element.name == 'table':
-        return convert_table_to_hwpml(element)
+
+        return '<P ParaShape="0" Style="0"><TEXT CharShape="0">' + convert_table_to_hwpml(element) + '<CHAR/></TEXT></P>'
+=======
+       
     elif element.name == 'blockquote':
         return convert_blockquote_to_hwpml(element)
     
@@ -1169,10 +1175,17 @@ def convert_paragraph_to_hwpml(p):
             has_content = True
         elif child.name in ['i', 'em']:
             hwpml += f'<TEXT CharShape="7"><CHAR>{escape_xml(child.text)}</CHAR></TEXT>'
+
             has_content = True
         elif child.name == 'code':
             hwpml += f'<TEXT CharShape="0"><CHAR>{escape_xml(child.text)}</CHAR></TEXT>'
             has_content = True
+=======
+            has_content = True
+        elif child.name == 'code':
+            hwpml += f'<TEXT CharShape="0"><CHAR>{escape_xml(child.text)}</CHAR></TEXT>'
+            has_content = True
+
     
     if not has_content:
         hwpml += '<TEXT CharShape="0"/>'
@@ -1281,34 +1294,58 @@ def convert_code_block_to_hwpml(pre):
     return hwpml
 
 def convert_table_to_hwpml(table):
-    """Convert HTML table to basic HWPML paragraphs (simplified)"""
-    # This is a simplified implementation - tables in HWPML are complex
-    hwpml = ""
-    
-    # Process table headers
-    headers = []
-    for th in table.find_all('th'):
-        headers.append(th.get_text().strip())
-    
-    if headers:
-        header_text = " | ".join(headers)
-        hwpml += f'<P ParaShape="0" Style="0"><TEXT CharShape="6"><CHAR>{escape_xml(header_text)}</CHAR></TEXT></P>\n'
+
+    # Find all rows in the HTML table
+    rows = table.find_all('tr')
+    row_count = len(rows)
+
+    # Determine column count
+    col_count = max(len(row.find_all(['td', 'th'])) for row in rows) if rows else 0
+
+    # Total width of the table (adjust this if needed)
+    total_table_width = 41950  # Total width of the table
+    cell_width = total_table_width // col_count if col_count > 0 else 20975  # Adjust cell width dynamically
+
+    # Build table structure
+    hwpml = f"""
+<TABLE BorderFill="3" CellSpacing="0" ColCount="{col_count}" PageBreak="Cell" RepeatHeader="false" RowCount="{row_count}">
+    <SHAPEOBJECT InstId="1797201703" Lock="false" NumberingType="Table" TextWrap="TopAndBottom" ZOrder="1">
+        <SIZE Height="2560" HeightRelTo="Absolute" Protect="false" Width="{total_table_width}" WidthRelTo="Absolute"/>
+        <POSITION AffectLSpacing="false" AllowOverlap="false" FlowWithText="true" HoldAnchorAndSO="false" HorzAlign="Left" HorzOffset="0" HorzRelTo="Para" TreatAsChar="false" VertAlign="Top" VertOffset="0" VertRelTo="Para"/>
+        <OUTSIDEMARGIN Bottom="285" Left="285" Right="285" Top="285"/>
+    </SHAPEOBJECT>
+    <INSIDEMARGIN Bottom="140" Left="510" Right="510" Top="140"/>"""
+
+    # Process rows and cells
+    for row_index, row in enumerate(rows):
+        hwpml += f"\n    <ROW>"
+        cells = row.find_all(['td', 'th'])
         
-        # Add separator line
-        separator = "-" * len(header_text)
-        hwpml += f'<P ParaShape="0" Style="0"><TEXT CharShape="0"><CHAR>{separator}</CHAR></TEXT></P>\n'
+        # Fill in missing cells if any
+        while len(cells) < col_count:
+            cells.append(None)
+            
+        for cell_index in range(col_count):
+            cell = cells[cell_index] if cell_index < len(cells) else None
+            cell_text = cell.text.strip() if cell else "&#160;"  # Non-breaking space for empty cells
+            
+            hwpml += f"""
+        <CELL BorderFill="5" ColAddr="{cell_index}" ColSpan="1" Dirty="false" Editable="false" HasMargin="false" Header="false" Height="500" Protect="false" RowAddr="{row_index}" RowSpan="1" Width="{cell_width}">
+            <CELLMARGIN Bottom="0" Left="0" Right="0" Top="0"/>
+            <PARALIST LineWrap="Break" LinkListID="0" LinkListIDNext="0" TextDirection="0" VertAlign="Center">
+                <P ParaShape="0" Style="0">
+                    <TEXT CharShape="0">
+                        <CHAR>{cell_text}</CHAR>
+                    </TEXT>
+                </P>
+            </PARALIST>
+        </CELL>"""
+        hwpml += f"\n    </ROW>"
     
-    # Process table rows
-    for tr in table.find_all('tr'):
-        cells = []
-        for td in tr.find_all('td'):
-            cells.append(td.get_text().strip())
-        
-        if cells:
-            row_text = " | ".join(cells)
-            hwpml += f'<P ParaShape="0" Style="0"><TEXT CharShape="0"><CHAR>{escape_xml(row_text)}</CHAR></TEXT></P>\n'
-    
+    hwpml += "\n</TABLE>"
+
     return hwpml
+
 
 def convert_blockquote_to_hwpml(blockquote):
     """Convert HTML blockquote to HWPML"""
