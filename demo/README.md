@@ -10,8 +10,6 @@
 
 ### 지원이 되지만 에러가 있는 Markdown 문법:
 - 테이블 (`| 열 | 열 |`) 현재 테두리 없는 표로 생성되거나 마크다운 문법이 그대로 출력되는 현상 발생
-<br>
-<예시>
 ![스크린샷 2025-03-18 204703](https://github.com/user-attachments/assets/85c74b59-c882-4d6a-a512-1045b1fab62a)
 ![스크린샷 2025-03-18 204655](https://github.com/user-attachments/assets/1be7b3b7-f0ba-46b6-a2b0-4ad0fe2aae4a)
 
