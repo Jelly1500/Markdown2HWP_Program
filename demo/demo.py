@@ -283,6 +283,7 @@ class MarkdownPreviewWidget(QTextEdit):
             self.setHtml(f"<p style='color: #f44336;'>Error in preview: {str(e)}</p>")
 
 
+
 class ConversionWorker(QThread):
     """Worker thread for handling the conversion process"""
     finished = Signal(bool, str)
@@ -331,6 +332,7 @@ class ConversionWorker(QThread):
             
         except Exception as e:
             self.finished.emit(False, f"Error: {str(e)}")
+
 
 
 class MainWindow(QMainWindow):
@@ -1145,7 +1147,10 @@ def convert_element_to_hwpml(element):
     elif element.name == 'pre':
         return convert_code_block_to_hwpml(element)
     elif element.name == 'table':
+
         return '<P ParaShape="0" Style="0"><TEXT CharShape="0">' + convert_table_to_hwpml(element) + '<CHAR/></TEXT></P>'
+=======
+       
     elif element.name == 'blockquote':
         return convert_blockquote_to_hwpml(element)
     
@@ -1170,10 +1175,17 @@ def convert_paragraph_to_hwpml(p):
             has_content = True
         elif child.name in ['i', 'em']:
             hwpml += f'<TEXT CharShape="7"><CHAR>{escape_xml(child.text)}</CHAR></TEXT>'
+
             has_content = True
         elif child.name == 'code':
             hwpml += f'<TEXT CharShape="0"><CHAR>{escape_xml(child.text)}</CHAR></TEXT>'
             has_content = True
+=======
+            has_content = True
+        elif child.name == 'code':
+            hwpml += f'<TEXT CharShape="0"><CHAR>{escape_xml(child.text)}</CHAR></TEXT>'
+            has_content = True
+
     
     if not has_content:
         hwpml += '<TEXT CharShape="0"/>'
@@ -1282,6 +1294,7 @@ def convert_code_block_to_hwpml(pre):
     return hwpml
 
 def convert_table_to_hwpml(table):
+
     # Find all rows in the HTML table
     rows = table.find_all('tr')
     row_count = len(rows)
@@ -1332,6 +1345,7 @@ def convert_table_to_hwpml(table):
     hwpml += "\n</TABLE>"
 
     return hwpml
+
 
 def convert_blockquote_to_hwpml(blockquote):
     """Convert HTML blockquote to HWPML"""
