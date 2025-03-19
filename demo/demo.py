@@ -94,6 +94,53 @@ HEADER = """<?xml version="1.0" encoding="UTF-8" standalone="no"?>
 </FONT>
 </FONTFACE>
 </FACENAMELIST>
+<BORDERFILLLIST Count="6">
+<BORDERFILL BackSlash="0" BreakCellSeparateLine="0" CenterLine="0" CounterBackSlash="0" CounterSlash="0" CrookedSlash="0" Id="1" Shadow="false" Slash="0" ThreeD="false">
+<LEFTBORDER Type="None" Width="0.1mm"/>
+<RIGHTBORDER Type="None" Width="0.1mm"/>
+<TOPBORDER Type="None" Width="0.1mm"/>
+<BOTTOMBORDER Type="None" Width="0.1mm"/>
+<DIAGONAL Type="Solid" Width="0.1mm"/>
+</BORDERFILL>
+<BORDERFILL BackSlash="0" BreakCellSeparateLine="0" CenterLine="0" CounterBackSlash="0" CounterSlash="0" CrookedSlash="0" Id="2" Shadow="false" Slash="0" ThreeD="false">
+<LEFTBORDER Type="None" Width="0.1mm"/>
+<RIGHTBORDER Type="None" Width="0.1mm"/>
+<TOPBORDER Type="None" Width="0.1mm"/>
+<BOTTOMBORDER Type="None" Width="0.1mm"/>
+<DIAGONAL Type="Solid" Width="0.1mm"/>
+<FILLBRUSH>
+<WINDOWBRUSH Alpha="0" FaceColor="4294967295" HatchColor="10066329"/>
+</FILLBRUSH>
+</BORDERFILL>
+<BORDERFILL BackSlash="0" BreakCellSeparateLine="0" CenterLine="0" CounterBackSlash="0" CounterSlash="0" CrookedSlash="0" Id="3" Shadow="false" Slash="0" ThreeD="false">
+<LEFTBORDER Type="Solid" Width="0.12mm"/>
+<RIGHTBORDER Type="Solid" Width="0.12mm"/>
+<TOPBORDER Type="Solid" Width="0.12mm"/>
+<BOTTOMBORDER Type="Solid" Width="0.12mm"/>
+<DIAGONAL Type="Solid" Width="0.1mm"/>
+</BORDERFILL>
+<BORDERFILL BackSlash="0" BreakCellSeparateLine="0" CenterLine="0" CounterBackSlash="0" CounterSlash="0" CrookedSlash="0" Id="4" Shadow="false" Slash="0" ThreeD="false">
+<LEFTBORDER Type="Solid" Width="0.12mm"/>
+<RIGHTBORDER Type="Solid" Width="0.12mm"/>
+<TOPBORDER Type="Dot" Width="0.3mm"/>
+<BOTTOMBORDER Type="Solid" Width="0.12mm"/>
+<DIAGONAL Type="Solid" Width="0.1mm"/>
+</BORDERFILL>
+<BORDERFILL BackSlash="0" BreakCellSeparateLine="0" CenterLine="0" CounterBackSlash="0" CounterSlash="0" CrookedSlash="0" Id="5" Shadow="false" Slash="0" ThreeD="false">
+<LEFTBORDER Type="Solid" Width="0.12mm"/>
+<RIGHTBORDER Type="Solid" Width="0.12mm"/>
+<TOPBORDER Type="Solid" Width="0.12mm"/>
+<BOTTOMBORDER Type="Dot" Width="0.3mm"/>
+<DIAGONAL Type="Solid" Width="0.1mm"/>
+</BORDERFILL>
+<BORDERFILL BackSlash="0" BreakCellSeparateLine="0" CenterLine="0" CounterBackSlash="0" CounterSlash="0" CrookedSlash="0" Id="6" Shadow="false" Slash="0" ThreeD="false">
+<LEFTBORDER Type="Solid" Width="0.12mm"/>
+<RIGHTBORDER Type="Solid" Width="0.12mm"/>
+<TOPBORDER Type="Dot" Width="0.3mm"/>
+<BOTTOMBORDER Type="Dot" Width="0.3mm"/>
+<DIAGONAL Type="Solid" Width="0.1mm"/>
+</BORDERFILL>
+</BORDERFILLLIST>
 <CHARSHAPELIST Count="9">
     <CHARSHAPE BorderFillId="2" Height="1000" Id="0" ShadeColor="4294967295" SymMark="0" TextColor="0" UseFontSpace="false" UseKerning="false">
         <FONTID Hangul="1" Hanja="1" Japanese="1" Latin="1" Other="1" Symbol="1" User="1" />
@@ -1285,53 +1332,59 @@ def convert_table_to_hwpml(table):
     # Find all rows in the HTML table
     rows = table.find_all('tr')
     row_count = len(rows)
-
     # Determine column count
     col_count = max(len(row.find_all(['td', 'th'])) for row in rows) if rows else 0
-
     # Total width of the table (adjust this if needed)
     total_table_width = 41950  # Total width of the table
     cell_width = total_table_width // col_count if col_count > 0 else 20975  # Adjust cell width dynamically
 
     # Build table structure
     hwpml = f"""
-<TABLE BorderFill="3" CellSpacing="0" ColCount="{col_count}" PageBreak="Cell" RepeatHeader="false" RowCount="{row_count}">
-    <SHAPEOBJECT InstId="1797201703" Lock="false" NumberingType="Table" TextWrap="TopAndBottom" ZOrder="1">
-        <SIZE Height="2560" HeightRelTo="Absolute" Protect="false" Width="{total_table_width}" WidthRelTo="Absolute"/>
-        <POSITION AffectLSpacing="false" AllowOverlap="false" FlowWithText="true" HoldAnchorAndSO="false" HorzAlign="Left" HorzOffset="0" HorzRelTo="Para" TreatAsChar="false" VertAlign="Top" VertOffset="0" VertRelTo="Para"/>
-        <OUTSIDEMARGIN Bottom="285" Left="285" Right="285" Top="285"/>
-    </SHAPEOBJECT>
-    <INSIDEMARGIN Bottom="140" Left="510" Right="510" Top="140"/>"""
+<TABLE BorderFill="3" CellSpacing="0" ColCount="{col_count}" PageBreak="Cell" RepeatHeader="true" RowCount="{row_count}">
+<SHAPEOBJECT InstId="1797984080" Lock="false" NumberingType="Table" TextWrap="TopAndBottom" ZOrder="1">
+<SIZE Height="3846" HeightRelTo="Absolute" Protect="false" Width="{total_table_width}" WidthRelTo="Absolute"/>
+<POSITION AffectLSpacing="false" AllowOverlap="false" FlowWithText="true" HoldAnchorAndSO="false" HorzAlign="Left" HorzOffset="0" HorzRelTo="Column" TreatAsChar="false" VertAlign="Top" VertOffset="0" VertRelTo="Para"/>
+<OUTSIDEMARGIN Bottom="283" Left="283" Right="283" Top="283"/>
+</SHAPEOBJECT>
+<INSIDEMARGIN Bottom="141" Left="510" Right="510" Top="141"/>"""
 
     # Process rows and cells
     for row_index, row in enumerate(rows):
-        hwpml += f"\n    <ROW>"
+        hwpml += f"\n<ROW>"
         cells = row.find_all(['td', 'th'])
-        
         # Fill in missing cells if any
         while len(cells) < col_count:
             cells.append(None)
-            
+        
         for cell_index in range(col_count):
             cell = cells[cell_index] if cell_index < len(cells) else None
             cell_text = cell.text.strip() if cell else "&#160;"  # Non-breaking space for empty cells
             
+            # 행 위치에 따라 테두리 스타일 결정
+            if row_index == 0:
+                border_fill_id = 3  # 첫번째 행: 상하단 모두 실선
+            elif row_index == row_count - 1:
+                border_fill_id = 4  # 마지막 행: 상단 점선, 하단 실선
+            else:
+                border_fill_id = 6  # 중간 행: 상하단 모두 점선
+            
             hwpml += f"""
-        <CELL BorderFill="5" ColAddr="{cell_index}" ColSpan="1" Dirty="false" Editable="false" HasMargin="false" Header="false" Height="500" Protect="false" RowAddr="{row_index}" RowSpan="1" Width="{cell_width}">
-            <CELLMARGIN Bottom="0" Left="0" Right="0" Top="0"/>
-            <PARALIST LineWrap="Break" LinkListID="0" LinkListIDNext="0" TextDirection="0" VertAlign="Center">
-                <P ParaShape="0" Style="0">
-                    <TEXT CharShape="0">
-                        <CHAR>{cell_text}</CHAR>
-                    </TEXT>
-                </P>
-            </PARALIST>
-        </CELL>"""
-        hwpml += f"\n    </ROW>"
+<CELL BorderFill="{border_fill_id}" ColAddr="{cell_index}" ColSpan="1" Dirty="false" Editable="false" HasMargin="false" Header="false" Height="282" Protect="false" RowAddr="{row_index}" RowSpan="1" Width="{cell_width}">
+<CELLMARGIN Bottom="141" Left="510" Right="510" Top="141"/>
+<PARALIST LineWrap="Break" LinkListID="0" LinkListIDNext="0" TextDirection="0" VertAlign="Center">
+<P ParaShape="0" Style="0">
+<TEXT CharShape="0">
+<CHAR>{cell_text}</CHAR>
+</TEXT>
+</P>
+</PARALIST>
+</CELL>"""
+        
+        hwpml += f"\n</ROW>"
     
     hwpml += "\n</TABLE>"
-
     return hwpml
+
 
 def convert_blockquote_to_hwpml(blockquote):
     """Convert HTML blockquote to HWPML"""
