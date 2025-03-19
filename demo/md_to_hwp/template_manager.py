@@ -13,8 +13,14 @@ class MarkdownTemplate:
         """생성자"""
         self.templates = {}
         self.current_template = "default"
-        self.load_default_template()
+        self.load_templates()
     
+    def load_templates(self):
+        """저장된 템플릿을 로드"""
+        self.load_from_file("templates.json")
+        if "default" not in self.templates:
+            self.load_default_template()
+
     def load_default_template(self):
         """기본 템플릿 설정 로드"""
         self.templates = {
@@ -41,7 +47,7 @@ class MarkdownTemplate:
                     "underline": False,
                     "paraShape": "0",
                     "template_type": "normal",
-                    "charShape": "2"
+                    "charShape": "2"  # h2에는 charShape="2" 사용
                 },
                 "heading3": {
                     "prefix": "### ",
@@ -53,7 +59,7 @@ class MarkdownTemplate:
                     "underline": False,
                     "paraShape": "0",
                     "template_type": "normal",
-                    "charShape": "3"
+                    "charShape": "3"  # h3에는 charShape="3" 사용
                 },
                 "heading4": {
                     "prefix": "#### ",
@@ -65,7 +71,7 @@ class MarkdownTemplate:
                     "underline": False,
                     "paraShape": "0",
                     "template_type": "normal",
-                    "charShape": "4"
+                    "charShape": "4"  # h4에는 charShape="4" 사용
                 },
                 "bullet_list": {
                     "symbol": "• ", 
@@ -97,7 +103,7 @@ class MarkdownTemplate:
                     "italic": False,
                     "underline": False,
                     "paraShape": "0",
-                    "charShape": "0"
+                    "charShape": "0"  # 일반 텍스트에는 charShape="0" 사용
                 },
                 "bold": {
                     "prefix": "**", 
@@ -108,7 +114,7 @@ class MarkdownTemplate:
                     "bold": True,
                     "italic": False,
                     "underline": False,
-                    "charShape": "6"
+                    "charShape": "6"  # 굵게에는 charShape="6" 사용
                 },
                 "italic": {
                     "prefix": "_", 
@@ -119,7 +125,7 @@ class MarkdownTemplate:
                     "bold": False,
                     "italic": True,
                     "underline": False,
-                    "charShape": "7"
+                    "charShape": "7"  # 기울임에는 charShape="7" 사용
                 },
                 "link": {
                     "prefix": "[", 
@@ -131,7 +137,7 @@ class MarkdownTemplate:
                     "bold": False,
                     "italic": False,
                     "underline": True,
-                    "charShape": "8"
+                    "charShape": "8"  # 링크에는 charShape="8" 사용
                 },
                 "table": {
                     "header_border": "3", 
@@ -170,7 +176,7 @@ class MarkdownTemplate:
                 self.templates = data.get("templates", {})
                 if "default" not in self.templates:
                     self.load_default_template()
-    
+                    
     def apply_template_to_element(self, element_type, content, **kwargs):
         """특정 마크다운 요소에 템플릿 적용"""
         current_tmpl = self.get_current_template()

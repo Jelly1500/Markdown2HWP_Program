@@ -65,14 +65,14 @@ class HWPMLConverter:
             "italic": "7",     # 기울임: charShape="7"
             "link": "8"        # 링크: charShape="8"
         }
-
+        
         # charShapeList 생성
         charshape_entries = []
-
+        
         # 각 요소 처리 (1~9번까지 항상 모든 ID 생성)
         for id_num in range(9):
             id_str = str(id_num)
-
+            
             # 해당 ID에 매핑된 요소 찾기
             element_type = None
             for el_type, char_id in element_id_map.items():
@@ -85,23 +85,23 @@ class HWPMLConverter:
                 settings = template_data[element_type]
                 # pt 단위를 hwp 단위로 변환 (1pt = 100 hwp 단위)
                 size = int(settings.get("size", 10) * 100)
-
+                
                 # 색상 처리
                 color_hex = settings.get("color", "#000000")
                 text_color = self.template_manager.rgb_to_hwp_color(color_hex)
-
+                
                 # 스타일 처리
                 bold_tag = "<BOLD />" if settings.get("bold", False) else ""
                 italic_tag = "<ITALIC />" if settings.get("italic", False) else ""
-                underline_tag = f'<UNDERLINE Color="0" Shape="Solid" Type="Single" />' if settings.get("underline", False) else ""
+                underline_tag = f'<UNDERLINE Color="0" Shape="Solid" Type="Bottom" />' if settings.get("underline", False) else ""
             else:
                 # 기본값 설정
                 size = 1000
                 text_color = 0
                 bold_tag = "<BOLD />" if id_num in [1, 2, 3, 4, 5, 6] else ""
                 italic_tag = "<ITALIC />" if id_num == 7 else ""
-                underline_tag = f'<UNDERLINE Color="0" Shape="Solid" Type="Single" />' if id_num == 8 else ""
-
+                underline_tag = f'<UNDERLINE Color="0" Shape="Solid" Type="Bottom" />' if id_num == 8 else ""
+            
             # charShape 항목 생성
             charshape = f'''
     <CHARSHAPE BorderFillId="2" Height="{size}" Id="{id_str}" ShadeColor="4294967295" SymMark="0" TextColor="{text_color}" UseFontSpace="false" UseKerning="false">
@@ -115,13 +115,13 @@ class HWPMLConverter:
     {underline_tag}
     </CHARSHAPE>'''
             charshape_entries.append(charshape)
-
+        
         # CHARSHAPELIST 전체 생성
         xml = f'<CHARSHAPELIST Count="{len(charshape_entries)}">\n'
         for charshape in charshape_entries:
             xml += charshape
         xml += '\n</CHARSHAPELIST>'
-
+        
         return xml
     
     def convert_html_to_hwpml(self, html):

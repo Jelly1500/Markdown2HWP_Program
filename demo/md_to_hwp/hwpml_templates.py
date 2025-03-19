@@ -195,7 +195,7 @@ HEADER = """<?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <CHARSPACING Hangul="0" Hanja="0" Japanese="0" Latin="0" Other="0" Symbol="0" User="0" />
 <RELSIZE Hangul="100" Hanja="100" Japanese="100" Latin="100" Other="100" Symbol="100" User="100" />
 <CHAROFFSET Hangul="0" Hanja="0" Japanese="0" Latin="0" Other="0" Symbol="0" User="0" />
-<UNDERLINE Color="0" Shape="Solid" Type="Single" />
+<UNDERLINE Color="0" Shape="Solid" Type="Bottom" />
 </CHARSHAPE>
 </CHARSHAPELIST>
 <PARASHAPELIST Count="9">

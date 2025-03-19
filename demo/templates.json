@@ -129,7 +129,126 @@
         "color": "#56c8c8",
         "bold": true,
         "italic": false,
+        "underline": true,
+        "paraShape": "0",
+        "template_type": "normal",
+        "charShape": "1"
+      },
+      "heading2": {
+        "prefix": "## ",
+        "font": "맑은 고딕",
+        "size": 16,
+        "color": "#000000",
+        "bold": true,
+        "italic": false,
         "underline": false,
+        "paraShape": "0",
+        "template_type": "normal",
+        "charShape": "2"
+      },
+      "heading3": {
+        "prefix": "### ",
+        "font": "맑은 고딕",
+        "size": 14,
+        "color": "#000000",
+        "bold": true,
+        "italic": false,
+        "underline": false,
+        "paraShape": "0",
+        "template_type": "normal",
+        "charShape": "3"
+      },
+      "heading4": {
+        "prefix": "#### ",
+        "font": "맑은 고딕",
+        "size": 12,
+        "color": "#000000",
+        "bold": true,
+        "italic": false,
+        "underline": false,
+        "paraShape": "0",
+        "template_type": "normal",
+        "charShape": "4"
+      },
+      "bullet_list": {
+        "symbol": "• ",
+        "font": "맑은 고딕",
+        "size": 10,
+        "color": "#000000",
+        "bold": false,
+        "italic": false,
+        "paraShape": "1",
+        "charShape": "0"
+      },
+      "ordered_list": {
+        "format": "%d. ",
+        "font": "맑은 고딕",
+        "size": 10,
+        "color": "#000000",
+        "bold": false,
+        "italic": false,
+        "paraShape": "1",
+        "charShape": "0"
+      },
+      "paragraph": {
+        "font": "맑은 고딕",
+        "size": 10,
+        "color": "#000000",
+        "bold": false,
+        "italic": false,
+        "underline": false,
+        "paraShape": "0",
+        "charShape": "0"
+      },
+      "bold": {
+        "prefix": "**",
+        "suffix": "**",
+        "font": "맑은 고딕",
+        "size": 10,
+        "color": "#000000",
+        "bold": true,
+        "italic": false,
+        "underline": false,
+        "charShape": "6"
+      },
+      "italic": {
+        "prefix": "_",
+        "suffix": "_",
+        "font": "맑은 고딕",
+        "size": 10,
+        "color": "#000000",
+        "bold": false,
+        "italic": true,
+        "underline": false,
+        "charShape": "7"
+      },
+      "link": {
+        "prefix": "[",
+        "middle": "](",
+        "suffix": ")",
+        "font": "맑은 고딕",
+        "size": 10,
+        "color": "#0000FF",
+        "bold": false,
+        "italic": false,
+        "underline": true,
+        "charShape": "8"
+      },
+      "table": {
+        "header_border": "3",
+        "middle_border": "6",
+        "last_border": "4"
+      }
+    },
+    "bb": {
+      "heading1": {
+        "prefix": "# ",
+        "font": "한컴 솔잎 M",
+        "size": 20,
+        "color": "#000000",
+        "bold": true,
+        "italic": true,
+        "underline": true,
         "paraShape": "0",
         "template_type": "normal",
         "charShape": "1"

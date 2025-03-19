@@ -380,6 +380,11 @@ class TemplateEditDialog(QDialog):
         italic_layout.addRow("크기:", self.italic_size)
         italic_layout.addRow("색상:", self.italic_color_btn)
         
+        # 레이아웃에 추가
+        self.text_layout.addWidget(self.text_group)
+        self.text_layout.addWidget(self.bold_group)
+        self.text_layout.addWidget(self.italic_group)
+        
         # 링크 그룹
         self.link_group = QGroupBox("링크")
         link_layout = QFormLayout(self.link_group)
@@ -410,9 +415,6 @@ class TemplateEditDialog(QDialog):
         link_layout.addRow("", self.link_underline)
         
         # 레이아웃에 추가
-        self.text_layout.addWidget(self.text_group)
-        self.text_layout.addWidget(self.bold_group)
-        self.text_layout.addWidget(self.italic_group)
         self.text_layout.addWidget(self.link_group)
     
     def create_table_tab(self):
@@ -562,8 +564,6 @@ class TemplateEditDialog(QDialog):
         
         # 대화상자 닫기
         self.accept()
-
-
 class ConverterGUI(QMainWindow):
     """마크다운 변환기 GUI 클래스"""
     
