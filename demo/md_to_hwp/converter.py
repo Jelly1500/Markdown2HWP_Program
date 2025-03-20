@@ -20,37 +20,87 @@ class HWPMLConverter:
     def convert_markdown_to_hwpml(self, md_text, title="제목 없음", author="작성자 없음", date="날짜 없음"):
         """마크다운 텍스트를 HWPML로 변환"""
         # YAML 헤더 제거 (있는 경우)
-        md_text = re.sub(r'^---\n([\s\S]*?)\n---\n', '', md_text, flags=re.DOTALL)
-        
+        md_text = re.sub(r'^---\n([\s\S]*? )\n---\n', '', md_text, flags=re.DOTALL)
+
         # 마크다운을 HTML로 변환
         html = markdown.markdown(md_text, extensions=['fenced_code', 'tables'], tab_length=2)
-        
+
         # 현재 템플릿 가져오기
         current_template = self.template_manager.get_current_template()
-        
+
         # 템플릿에 따라 동적 HWPML 요소 생성
+        font_face_list = self.generate_fontface(current_template)
         char_shape_list = self.generate_charshapelist(current_template)
-        
-        # 기존 HEADER에서 CHARSHAPELIST 부분 교체
+
+        # 기존 HEADER에서 FACENAMELIST 부분 교체
         header = re.sub(
-            r'<CHARSHAPELIST.*?</CHARSHAPELIST>',
-            char_shape_list,
-            HEADER,
+            r'<FACENAMELIST>.*?</FACENAMELIST>', 
+            font_face_list, 
+            HEADER, 
             flags=re.DOTALL
         )
-        
+
+        # CHARSHAPELIST 부분 교체
+        header = re.sub(
+            r'<CHARSHAPELIST.*?</CHARSHAPELIST>', 
+            char_shape_list, 
+            header, 
+            flags=re.DOTALL
+        )
+
         # HTML을 HWPML로 변환
         hwpml_content = self.convert_html_to_hwpml(html)
-        
+
         # 문서 조합
         hwpml = header + INTRO + hwpml_content + FOOTER
-        
+
         # 메타데이터 치환
         hwpml = hwpml.replace("___TITLE___", title)
         hwpml = hwpml.replace("___AUTHOR___", author)
         hwpml = hwpml.replace("___DATE___", date)
-        
+
         return hwpml
+    
+    def generate_fontface(self, template_data):
+        """템플릿 설정에 따라 FONTFACE를 동적으로 생성"""
+        # Collect all unique fonts used in the template
+        fonts = set()
+        for element_type, settings in template_data.items():
+            if isinstance(settings, dict) and "font" in settings:
+                fonts.add(settings["font"])
+
+        # If no fonts specified, add default fonts
+        if not fonts:
+            fonts = {"맑은 고딕", "함초롬돋움", "함초롬바탕"}
+
+        # Add common Korean fonts to ensure compatibility
+        fonts.update(["굴림", "한컴바탕"])
+
+        # Sort fonts to ensure consistent IDs
+        fonts = sorted(list(fonts))
+
+        # Create font ID mapping (store as instance variable)
+        self.font_id_map = {font: str(i) for i, font in enumerate(fonts)}
+
+        # All language categories that need font definitions
+        languages = ["Hangul", "Latin", "Hanja", "Japanese", "Other", "Symbol", "User"]
+
+        # Generate complete FACENAMELIST section
+        xml = '<FACENAMELIST>\n'
+
+        # Create FONTFACE section for each language
+        for lang in languages:
+            xml += f'<FONTFACE Count="{len(fonts)}" Lang="{lang}">\n'
+            for i, font in enumerate(fonts):
+                # Basic TYPEINFO attributes that work for most fonts
+                xml += f'<FONT Id="{i}" Name="{font}" Type="ttf">\n'
+                xml += '<TYPEINFO ArmStyle="1" Contrast="0" FamilyType="2" Letterform="1" '
+                xml += 'Midline="1" Proportion="0" StrokeVariation="1" Weight="6" XHeight="1"/>\n'
+                xml += '</FONT>\n'
+            xml += '</FONTFACE>\n'
+
+        xml += '</FACENAMELIST>'
+        return xml
     
     def generate_charshapelist(self, template_data):
         """템플릿 설정에 따라 CHARSHAPELIST를 동적으로 생성"""
@@ -65,12 +115,12 @@ class HWPMLConverter:
             "italic": "7",     # 기울임: charShape="7"
             "link": "8"        # 링크: charShape="8"
         }
-        
+    
         # charShapeList 생성
         charshape_entries = []
         
-        # 각 요소 처리 (1~9번까지 항상 모든 ID 생성)
-        for id_num in range(9):
+        # 각 요소 처리 (0~9번까지 항상 모든 ID 생성)
+        for id_num in range(18):  # 샘플 파일에서는 18개의 CharShape이 있음
             id_str = str(id_num)
             
             # 해당 ID에 매핑된 요소 찾기
@@ -90,6 +140,11 @@ class HWPMLConverter:
                 color_hex = settings.get("color", "#000000")
                 text_color = self.template_manager.rgb_to_hwp_color(color_hex)
                 
+                # 글꼴 처리 - 이름으로 ID 찾기
+                font_name = settings.get("font", "맑은 고딕")
+                # 만약 해당 글꼴이 매핑에 없으면 기본값 사용
+                font_id = self.font_id_map.get(font_name, "0")
+                
                 # 스타일 처리
                 bold_tag = "<BOLD />" if settings.get("bold", False) else ""
                 italic_tag = "<ITALIC />" if settings.get("italic", False) else ""
@@ -98,21 +153,21 @@ class HWPMLConverter:
                 # 기본값 설정
                 size = 1000
                 text_color = 0
+                font_id = "0"  # 기본 글꼴 ID
                 bold_tag = "<BOLD />" if id_num in [1, 2, 3, 4, 5, 6] else ""
                 italic_tag = "<ITALIC />" if id_num == 7 else ""
                 underline_tag = f'<UNDERLINE Color="0" Shape="Solid" Type="Bottom" />' if id_num == 8 else ""
             
-            # charShape 항목 생성
-            charshape = f'''
-    <CHARSHAPE BorderFillId="2" Height="{size}" Id="{id_str}" ShadeColor="4294967295" SymMark="0" TextColor="{text_color}" UseFontSpace="false" UseKerning="false">
-    <FONTID Hangul="1" Hanja="1" Japanese="1" Latin="1" Other="1" Symbol="1" User="1" />
-    <RATIO Hangul="100" Hanja="100" Japanese="100" Latin="100" Other="100" Symbol="100" User="100" />
-    <CHARSPACING Hangul="0" Hanja="0" Japanese="0" Latin="0" Other="0" Symbol="0" User="0" />
-    <RELSIZE Hangul="100" Hanja="100" Japanese="100" Latin="100" Other="100" Symbol="100" User="100" />
-    <CHAROFFSET Hangul="0" Hanja="0" Japanese="0" Latin="0" Other="0" Symbol="0" User="0" />
-    {bold_tag}
-    {italic_tag}
-    {underline_tag}
+            # charShape 항목 생성 - 모든 FONTID 속성에 동일한 font_id 사용
+            charshape = f'''<CHARSHAPE BorderFillId="2" Height="{size}" Id="{id_str}" ShadeColor="4294967295" SymMark="0" TextColor="{text_color}" UseFontSpace="false" UseKerning="false">
+        <FONTID Hangul="{font_id}" Hanja="{font_id}" Japanese="{font_id}" Latin="{font_id}" Other="{font_id}" Symbol="{font_id}" User="{font_id}"/>
+        <RATIO Hangul="100" Hanja="100" Japanese="100" Latin="100" Other="100" Symbol="100" User="100"/>
+        <CHARSPACING Hangul="0" Hanja="0" Japanese="0" Latin="0" Other="0" Symbol="0" User="0"/>
+        <RELSIZE Hangul="100" Hanja="100" Japanese="100" Latin="100" Other="100" Symbol="100" User="100"/>
+        <CHAROFFSET Hangul="0" Hanja="0" Japanese="0" Latin="0" Other="0" Symbol="0" User="0"/>
+        {bold_tag}
+        {italic_tag}
+        {underline_tag}
     </CHARSHAPE>'''
             charshape_entries.append(charshape)
         

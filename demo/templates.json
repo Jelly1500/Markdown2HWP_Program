@@ -124,7 +124,7 @@
     "test": {
       "heading1": {
         "prefix": "# ",
-        "font": "맑은 고딕",
+        "font": "궁서체",
         "size": 20,
         "color": "#56c8c8",
         "bold": true,
@@ -136,7 +136,7 @@
       },
       "heading2": {
         "prefix": "## ",
-        "font": "맑은 고딕",
+        "font": "굴림체",
         "size": 16,
         "color": "#000000",
         "bold": true,
@@ -191,7 +191,7 @@
         "charShape": "0"
       },
       "paragraph": {
-        "font": "맑은 고딕",
+        "font": "한컴 윤체 B",
         "size": 10,
         "color": "#000000",
         "bold": false,
