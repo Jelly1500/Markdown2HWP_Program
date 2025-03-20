@@ -1228,6 +1228,33 @@ def convert_paragraph_to_hwpml(p):
     hwpml += '</P>\n'
     return hwpml
 
+def convert_cell_content_to_hwpml(cell):
+    if cell is None:
+        return '<TEXT CharShape="0"><CHAR>&#160;</CHAR></TEXT>'  # 빈 셀
+    
+    # 셀에서 직접 HTML 내용 추출 (text가 아닌 내부 태그 포함)
+    hwpml = ''
+    
+    # 내용이 없으면 빈 태그 반환
+    if len(list(cell.children)) == 0:
+        content = cell.string if cell.string else "&#160;"
+        return f'<TEXT CharShape="0"><CHAR>{content}</CHAR></TEXT>'
+    
+    # 내용 처리
+    for child in cell.children:
+        if isinstance(child, NavigableString):
+            text = str(child).strip()
+            if text:
+                hwpml += f'<TEXT CharShape="0"><CHAR>{text}</CHAR></TEXT>'
+        elif child.name == 'strong' or child.name == 'b':
+            hwpml += f'<TEXT CharShape="6"><CHAR>{child.get_text()}</CHAR></TEXT>'
+        elif child.name == 'em' or child.name == 'i':
+            hwpml += f'<TEXT CharShape="7"><CHAR>{child.get_text()}</CHAR></TEXT>'
+        elif child.name == 'a':
+            hwpml += convert_a_to_hwpml(child)
+    
+    return hwpml if hwpml else '<TEXT CharShape="0"><CHAR>&#160;</CHAR></TEXT>'
+
 def convert_a_to_hwpml(a):
     """Convert HTML anchor to HWPML hyperlink"""
     global field_id_counter
@@ -1358,7 +1385,6 @@ def convert_table_to_hwpml(table):
         
         for cell_index in range(col_count):
             cell = cells[cell_index] if cell_index < len(cells) else None
-            cell_text = cell.text.strip() if cell else "&#160;"  # Non-breaking space for empty cells
             
             # 행 위치에 따라 테두리 스타일 결정
             if row_index == 0:
@@ -1372,10 +1398,12 @@ def convert_table_to_hwpml(table):
 <CELL BorderFill="{border_fill_id}" ColAddr="{cell_index}" ColSpan="1" Dirty="false" Editable="false" HasMargin="false" Header="false" Height="282" Protect="false" RowAddr="{row_index}" RowSpan="1" Width="{cell_width}">
 <CELLMARGIN Bottom="141" Left="510" Right="510" Top="141"/>
 <PARALIST LineWrap="Break" LinkListID="0" LinkListIDNext="0" TextDirection="0" VertAlign="Center">
-<P ParaShape="0" Style="0">
-<TEXT CharShape="0">
-<CHAR>{cell_text}</CHAR>
-</TEXT>
+<P ParaShape="0" Style="0">"""
+            
+            # 셀 내용 추가 (마크다운 서식 지원)
+            hwpml += convert_cell_content_to_hwpml(cell)
+            
+            hwpml += """
 </P>
 </PARALIST>
 </CELL>"""
@@ -1384,6 +1412,7 @@ def convert_table_to_hwpml(table):
     
     hwpml += "\n</TABLE>"
     return hwpml
+
 
 def convert_blockquote_to_hwpml(blockquote):
     """Convert HTML blockquote to HWPML"""

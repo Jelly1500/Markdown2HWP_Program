@@ -1,3 +1,5 @@
+### run.bat이나 python -m md_to_hwp.main으로 실행가능합니다
+
 변환을 지원하는 Markdown 문법을 정리하면 다음과 같습니다.
 
 ### ✅ 현재 지원되는 Markdown 문법:
