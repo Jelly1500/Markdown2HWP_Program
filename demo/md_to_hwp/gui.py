@@ -174,6 +174,11 @@ class TemplateEditDialog(QDialog):
         self.h2_underline = QCheckBox("밑줄")
         self.h2_underline.setChecked(h2_tmpl.get("underline", False))
         
+        # 템플릿 유형
+        self.h2_template_type = QComboBox()
+        self.h2_template_type.addItems(["normal", "table"])
+        self.h2_template_type.setCurrentText(h2_tmpl.get("template_type", "normal"))
+        
         # 폼에 추가
         h2_layout.addRow("기호:", self.h2_prefix)
         h2_layout.addRow("글꼴:", self.h2_font)
