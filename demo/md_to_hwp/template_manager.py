@@ -216,3 +216,13 @@ class MarkdownTemplate:
         # RGB 순서가 아닌 BGR 순서로 변환해야 함
         r, g, b = int(color_hex[0:2], 16), int(color_hex[2:4], 16), int(color_hex[4:6], 16)
         return (b << 16) | (g << 8) | r
+
+    def delete_template(self, name):
+        """템플릿 삭제"""
+        if name in self.templates and name != "default":  # Prevent deletion of default template
+            del self.templates[name]
+            if self.current_template == name:
+                self.current_template = "default"  # Revert to default if current template is deleted
+            self.save_to_file()
+            return True
+        return False

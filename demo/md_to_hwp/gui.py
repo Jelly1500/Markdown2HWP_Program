@@ -595,11 +595,14 @@ class ConverterGUI(QMainWindow):
         self.update_template_combo()
         
         self.template_edit_btn = QPushButton("템플릿 편집")
+        self.template_delete_btn = QPushButton("템플릿 삭제")
+
         self.template_new_btn = QPushButton("새 템플릿")
         
         self.template_layout.addWidget(self.template_label)
         self.template_layout.addWidget(self.template_combo)
         self.template_layout.addWidget(self.template_edit_btn)
+        self.template_layout.addWidget(self.template_delete_btn)
         self.template_layout.addWidget(self.template_new_btn)
         
         self.layout.addLayout(self.template_layout)
@@ -634,10 +637,35 @@ class ConverterGUI(QMainWindow):
         self.template_combo.currentTextChanged.connect(self.change_template)
         self.template_edit_btn.clicked.connect(self.edit_template)
         self.template_new_btn.clicked.connect(self.create_new_template)
+        self.template_delete_btn.clicked.connect(self.delete_template)
         
         # 저장 경로 초기화
         self.save_path = ""
     
+    def delete_template(self):
+        """현재 선택된 템플릿 삭제"""
+        template_name = self.template_combo.currentText()
+        if template_name == "default":
+            self.status_bar.showMessage("기본 템플릿은 삭제할 수 없습니다")
+            return
+
+        # Confirm deletion
+        from PySide6.QtWidgets import QMessageBox
+        confirm = QMessageBox.question(
+            self, 
+            "템플릿 삭제", 
+            f"템플릿 '{template_name}'을 삭제하시겠습니까?",
+            QMessageBox.Yes | QMessageBox.No
+        )
+
+        if confirm == QMessageBox.Yes:
+            success = self.template_manager.delete_template(template_name)
+            if success:
+                self.update_template_combo()
+                self.status_bar.showMessage(f"템플릿 '{template_name}' 삭제됨")
+            else:
+                self.status_bar.showMessage("템플릿 삭제 실패")
+
     def update_template_combo(self):
         """템플릿 콤보박스 갱신"""
         self.template_combo.clear()
