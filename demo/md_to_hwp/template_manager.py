@@ -139,11 +139,6 @@ class MarkdownTemplate:
                     "underline": True,
                     "charShape": "8"  # 링크에는 charShape="8" 사용
                 },
-                "table": {
-                    "header_border": "3", 
-                    "middle_border": "6", 
-                    "last_border": "4"
-                }
             }
         }
     

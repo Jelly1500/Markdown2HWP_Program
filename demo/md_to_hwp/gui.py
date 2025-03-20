@@ -92,7 +92,6 @@ class TemplateEditDialog(QDialog):
         self.tabs.addTab(self.headings_tab, "제목")
         self.tabs.addTab(self.lists_tab, "목록")
         self.tabs.addTab(self.text_tab, "텍스트 서식")
-        self.tabs.addTab(self.table_tab, "표")
         
         self.layout.addWidget(self.tabs)
         
