@@ -661,19 +661,29 @@ class HWPMLConverter:
         return hwpml
     
     def _insert_text_into_template(self, template, text):
-        """텍스트를 템플릿의 CHAR 태그 내에 삽입"""
+        """텍스트를 템플릿의 CHAR 태그 내에 삽입. 모든 CHAR 태그 중 내용 길이가 가장 긴 태그를 찾아 대체함."""
+        # 모든 <CHAR>...</CHAR> 태그 찾기
         char_pattern = re.compile(r'<CHAR>(.*?)</CHAR>')
-        match = char_pattern.search(template)
+        matches = list(char_pattern.finditer(template))
         
-        if match:
-            return template.replace(match.group(0), f'<CHAR>{text}</CHAR>', 1)
+        if matches:
+            # 각 매치의 그룹1(내용)의 길이를 비교하여 가장 긴 매치 선택
+            longest_match = max(matches, key=lambda m: len(m.group(1)))
+            start, end = longest_match.span()
+            replacement = f'<CHAR>{text}</CHAR>'
+            # 템플릿에서 해당 부분만 대체
+            new_template = template[:start] + replacement + template[end:]
+            return new_template
         else:
+            # <CHAR> 태그가 없으면 TEXT 태그 내의 CHAR 태그를 대상으로 처리
             text_pattern = re.compile(r'<TEXT CharShape="(\d+)">(.*?)</TEXT>')
             match = text_pattern.search(template)
             if match:
                 char_shape = match.group(1)
-                return template.replace(match.group(0), f'<TEXT CharShape="{char_shape}"><CHAR>{text}</CHAR></TEXT>', 1)
+                replacement = f'<TEXT CharShape="{char_shape}"><CHAR>{text}</CHAR></TEXT>'
+                return template.replace(match.group(0), replacement, 1)
         return template
+
     
     def _convert_list_to_hwpml(self, list_element, template_style):
         """리스트를 HWPML로 변환"""
