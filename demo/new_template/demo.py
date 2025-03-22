@@ -516,15 +516,8 @@ class HWPMLConverter:
         content = item['content']
         level = item.get('level', 0)
         is_ordered = item.get('is_ordered', False)
-        
-        # 들여쓰기 레벨에 따라 ParaShape 조정
-        para_shape = str(para_shape_base + level)
-        
-        # 템플릿 구조에서 P 태그와 ParaShape 속성 추출 및 수정
-        p_tag_pattern = re.compile(r'<P ParaShape="\d+"')
-        template_with_level = p_tag_pattern.sub(f'<P ParaShape="{para_shape}"', template)
-        
-        # 항목 번호/기호 생성
+    
+        # 기호 결정
         if is_ordered:
             # 순서 있는 리스트 (번호)
             if counter is None:
@@ -533,30 +526,27 @@ class HWPMLConverter:
                 counter[level] = 1
             else:
                 counter[level] += 1
-                
             prefix = f"{counter[level]}. "
         else:
             # 순서 없는 리스트 (글머리표)
-            prefix = f"{self.bullet_symbol} "
-        
-        # 최종 항목 텍스트 생성
-        item_text = prefix + content
-        
-        # 템플릿에 텍스트 삽입
-        hwpml += self._insert_text_into_template(template_with_level, item_text)
-        
+            prefix = f"{self.bullet_symbol} " if self.bullet_symbol else "• "
+    
+        # 새로운 CHAR 태그 생성
+        new_char_content = f"{prefix}{content}"
+    
+        # 템플릿에서 모든 CHAR 태그 제거
+        cleared_template = re.sub(r'<CHAR>.*?</CHAR>', '', template)
+    
+        # 새로운 CHAR 태그 추가
+        hwpml += f"<P ParaShape='0' Style='0'><TEXT CharShape='{char_shape}'><CHAR>{new_char_content}</CHAR></TEXT></P>"
+    
         # 중첩 항목 처리 (있는 경우)
         if 'nested_items' in item and item['nested_items']:
             for nested_item in item['nested_items']:
-                hwpml += self._process_list_item(
-                    nested_item, 
-                    template, 
-                    para_shape_base, 
-                    char_shape, 
-                    counter
-                )
-        
+                hwpml += self._process_list_item(nested_item, template, para_shape_base, char_shape, counter)
+    
         return hwpml
+
     
     def _convert_table_to_hwpml(self, table_element, template_style):
         """표를 HWPML로 변환"""
