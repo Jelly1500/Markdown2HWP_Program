@@ -221,3 +221,78 @@ class MarkdownTemplate:
             self.save_to_file()
             return True
         return False
+
+    def generate_charshapelist(self, template_data):
+        """템플릿 설정에 따라 CHARSHAPELIST를 동적으로 생성"""
+        # 각 요소와 charShape ID 매핑 정의
+        element_id_map = {
+            "paragraph": "0",  # 일반 텍스트: charShape="0"
+            "heading1": "1",   # H1 태그: charShape="1"
+            "heading2": "2",   # H2 태그: charShape="2"
+            "heading3": "3",   # H3 태그: charShape="3"
+            "heading4": "4",   # H4 태그: charShape="4"
+            "link": "8"        # 링크: charShape="8"
+        }
+    
+        # charShapeList 생성
+        charshape_entries = []
+        
+        # 각 요소 처리 (0~9번까지 항상 모든 ID 생성)
+        for id_num in range(18):  # 샘플 파일에서는 18개의 CharShape이 있음
+            id_str = str(id_num)
+            
+            # 해당 ID에 매핑된 요소 찾기
+            element_type = None
+            for el_type, char_id in element_id_map.items():
+                if char_id == id_str and el_type in template_data:
+                    element_type = el_type
+                    break
+                
+            # 매핑된 요소가 있으면 해당 설정 사용, 없으면 기본값 사용
+            if element_type and element_type in template_data:
+                settings = template_data[element_type]
+                # pt 단위를 hwp 단위로 변환 (1pt = 100 hwp 단위)
+                size = int(settings.get("size", 10) * 100)
+                
+                # 색상 처리
+                color_hex = settings.get("color", "#000000")
+                text_color = self.rgb_to_hwp_color(color_hex)
+                
+                # 글꼴 처리 - 이름으로 ID 찾기
+                font_name = settings.get("font", "맑은 고딕")
+                # 만약 해당 글꼴이 매핑에 없으면 기본값 사용
+                font_id = self.font_id_map.get(font_name, "0")
+                
+                # 스타일 처리
+                bold_tag = "<BOLD />" if settings.get("bold", False) else ""
+                italic_tag = "<ITALIC />" if settings.get("italic", False) else ""
+                underline_tag = f'<UNDERLINE Color="0" Shape="Solid" Type="Bottom" />' if settings.get("underline", False) else ""
+            else:
+                # 기본값 설정
+                size = 1000
+                text_color = 0
+                font_id = "0"  # 기본 글꼴 ID
+                bold_tag = "<BOLD />" if id_num in [1, 2, 3, 4] else ""
+                italic_tag = ""
+                underline_tag = f'<UNDERLINE Color="0" Shape="Solid" Type="Bottom" />' if id_num == 8 else ""
+            
+            # charShape 항목 생성 - 모든 FONTID 속성에 동일한 font_id 사용
+            charshape = f'''<CHARSHAPE BorderFillId="2" Height="{size}" Id="{id_str}" ShadeColor="4294967295" SymMark="0" TextColor="{text_color}" UseFontSpace="false" UseKerning="false">
+        <FONTID Hangul="{font_id}" Hanja="{font_id}" Japanese="{font_id}" Latin="{font_id}" Other="{font_id}" Symbol="{font_id}" User="{font_id}"/>
+        <RATIO Hangul="100" Hanja="100" Japanese="100" Latin="100" Other="100" Symbol="100" User="100"/>
+        <CHARSPACING Hangul="0" Hanja="0" Japanese="0" Latin="0" Other="0" Symbol="0" User="0"/>
+        <RELSIZE Hangul="100" Hanja="100" Japanese="100" Latin="100" Other="100" Symbol="100" User="100"/>
+        <CHAROFFSET Hangul="0" Hanja="0" Japanese="0" Latin="0" Other="0" Symbol="0" User="0"/>
+        {bold_tag}
+        {italic_tag}
+        {underline_tag}
+    </CHARSHAPE>'''
+            charshape_entries.append(charshape)
+        
+        # CHARSHAPELIST 전체 생성
+        xml = f'<CHARSHAPELIST Count="{len(charshape_entries)}">\n'
+        for charshape in charshape_entries:
+            xml += charshape
+        xml += '\n</CHARSHAPELIST>'
+        
+        return xml

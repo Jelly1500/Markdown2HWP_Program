@@ -313,7 +313,7 @@ class TemplateEditDialog(QDialog):
         self.text_layout = QVBoxLayout(self.text_tab)
         
         # 일반 텍스트 그룹
-        self.text_group = QGroupBox("일반 텍스트")
+        self.text_group = QGroupBox("일반 텍스트 (기본 서식)")
         text_layout = QFormLayout(self.text_group)
         
         text_tmpl = self.template_data.get("paragraph", {})
@@ -331,7 +331,12 @@ class TemplateEditDialog(QDialog):
         text_layout.addRow("크기:", self.text_size)
         text_layout.addRow("색상:", self.text_color_btn)
         
-        # 굵게 그룹
+        # 일반 텍스트 설정이 변경될 때 굵기/기울임 문법에 자동 적용
+        self.text_font.currentFontChanged.connect(lambda font: self.update_bold_italic_font(font))
+        self.text_size.valueChanged.connect(lambda size: self.update_bold_italic_size(size))
+        self.text_color_btn.clicked.connect(self.update_bold_italic_color)
+        
+        # 굵기 그룹
         self.bold_group = QGroupBox("굵게")
         bold_layout = QFormLayout(self.bold_group)
         
@@ -340,19 +345,13 @@ class TemplateEditDialog(QDialog):
         self.bold_suffix = QLineEdit(bold_tmpl.get("suffix", "**"))
         
         self.bold_font = QFontComboBox()
-        self.bold_font.setCurrentFont(QFont(bold_tmpl.get("font", "맑은 고딕")))
+        self.bold_font.setCurrentFont(QFont(bold_tmpl.get("font", text_tmpl.get("font", "맑은 고딕"))))
         
         self.bold_size = QSpinBox()
         self.bold_size.setRange(8, 72)
-        self.bold_size.setValue(bold_tmpl.get("size", 10))
+        self.bold_size.setValue(bold_tmpl.get("size", text_tmpl.get("size", 10)))
         
-        self.bold_color_btn = ColorButton(bold_tmpl.get("color", "#000000"))
-        
-        bold_layout.addRow("시작 기호:", self.bold_prefix)
-        bold_layout.addRow("종료 기호:", self.bold_suffix)
-        bold_layout.addRow("글꼴:", self.bold_font)
-        bold_layout.addRow("크기:", self.bold_size)
-        bold_layout.addRow("색상:", self.bold_color_btn)
+        self.bold_color_btn = ColorButton(bold_tmpl.get("color", text_tmpl.get("color", "#000000")))
         
         # 기울임 그룹
         self.italic_group = QGroupBox("기울임")
@@ -363,24 +362,16 @@ class TemplateEditDialog(QDialog):
         self.italic_suffix = QLineEdit(italic_tmpl.get("suffix", "_"))
         
         self.italic_font = QFontComboBox()
-        self.italic_font.setCurrentFont(QFont(italic_tmpl.get("font", "맑은 고딕")))
+        self.italic_font.setCurrentFont(QFont(italic_tmpl.get("font", text_tmpl.get("font", "맑은 고딕"))))
         
         self.italic_size = QSpinBox()
         self.italic_size.setRange(8, 72)
-        self.italic_size.setValue(italic_tmpl.get("size", 10))
+        self.italic_size.setValue(italic_tmpl.get("size", text_tmpl.get("size", 10)))
         
-        self.italic_color_btn = ColorButton(italic_tmpl.get("color", "#000000"))
-        
-        italic_layout.addRow("시작 기호:", self.italic_prefix)
-        italic_layout.addRow("종료 기호:", self.italic_suffix)
-        italic_layout.addRow("글꼴:", self.italic_font)
-        italic_layout.addRow("크기:", self.italic_size)
-        italic_layout.addRow("색상:", self.italic_color_btn)
+        self.italic_color_btn = ColorButton(italic_tmpl.get("color", text_tmpl.get("color", "#000000")))
         
         # 레이아웃에 추가
         self.text_layout.addWidget(self.text_group)
-        self.text_layout.addWidget(self.bold_group)
-        self.text_layout.addWidget(self.italic_group)
         
         # 링크 그룹
         self.link_group = QGroupBox("링크")
@@ -413,6 +404,21 @@ class TemplateEditDialog(QDialog):
         
         # 레이아웃에 추가
         self.text_layout.addWidget(self.link_group)
+    
+    def update_bold_italic_font(self, font):
+        """일반 텍스트의 글꼴이 변경될 때 굵기/기울임 문법의 글꼴도 업데이트"""
+        self.bold_font.setCurrentFont(font)
+        self.italic_font.setCurrentFont(font)
+    
+    def update_bold_italic_size(self, size):
+        """일반 텍스트의 크기가 변경될 때 굵기/기울임 문법의 크기도 업데이트"""
+        self.bold_size.setValue(size)
+        self.italic_size.setValue(size)
+    
+    def update_bold_italic_color(self):
+        """일반 텍스트의 색상이 변경될 때 굵기/기울임 문법의 색상도 업데이트"""
+        self.bold_color_btn.setColor(self.text_color_btn.color)
+        self.italic_color_btn.setColor(self.text_color_btn.color)
     
     def create_table_tab(self):
         """표 탭 생성"""
@@ -561,6 +567,7 @@ class TemplateEditDialog(QDialog):
         
         # 대화상자 닫기
         self.accept()
+
 class ConverterGUI(QMainWindow):
     """마크다운 변환기 GUI 클래스"""
     
