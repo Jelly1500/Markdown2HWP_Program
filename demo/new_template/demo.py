@@ -500,28 +500,30 @@ class HWPMLConverter:
         return template
     
     def _convert_list_to_hwpml(self, list_element, template_style):
-        """리스트를 HWPML로 변환 (특수기호 활용 및 중첩 리스트 지원)"""
         hwpml = ""
         ul_template = template_style['structure']
-        # para_shape_base = int(template_style['para_shape'])  # 더 이상 필요하지 않음
         char_shape = template_style['char_shape']
-        
-        # 모든 리스트 항목 처리 (최상위 레벨부터)
+        top_level_counter = 1  # 최상단 리스트용 카운터 초기화
+
+        # 최상단 리스트 항목 처리
         for item in list_element['items']:
-            # 인자 순서 변경: para_shape_base 제거하고 올바른 순서로 전달
-            hwpml += self._process_list_item(item, ul_template, char_shape)
-        
+            hwpml += self._process_list_item(item, ul_template, char_shape, top_level_counter, is_top_level=True)
+            if item['is_ordered']:  # 순서 있는 리스트라면 카운터 증가
+                top_level_counter += 1
+
         return hwpml
 
 
-    def _process_list_item(self, item, template, char_shape, counter=None):
+    def _process_list_item(self, item, template, char_shape, top_level_counter, is_top_level=False, counter=None):
+        if counter is None:
+            counter = {}  # 중첩 리스트용 카운터 초기화
+            
         hwpml = ""
         fragments = item['fragments']
         level = item.get('level', 0)
         is_ordered = item.get('is_ordered', False)
         
-        if counter is None:
-            counter = {}
+       
         
         # 템플릿에서 P 태그 속성 추출
         p_tag_match = re.search(r'<P\s+([^>]+)>', template)
@@ -529,13 +531,17 @@ class HWPMLConverter:
         
         # 접두사 생성
         if is_ordered:
-            if level not in counter:
-                counter[level] = 1
+            if is_top_level:
+                # 최상단 리스트면 top_level_counter 사용
+                prefix = f"{top_level_counter}. "
             else:
+                # 중첩 리스트면 레벨별 카운터 사용
+                if level not in counter:
+                    counter[level] = 1
+                prefix = f"{counter[level]}. "
                 counter[level] += 1
-            prefix = f"{counter[level]}. "
         else:
-            prefix = f"{self.bullet_symbol} " if self.bullet_symbol else "• "
+            prefix = f"{self.bullet_symbol} "  # 순서 없는 리스트의 경우
         
         # 들여쓰기
         indent = "  " * level
@@ -593,8 +599,7 @@ class HWPMLConverter:
         # 중첩 항목 처리
         if 'nested_items' in item and item['nested_items']:
             for nested_item in item['nested_items']:
-                hwpml += self._process_list_item(nested_item, template, char_shape, counter)
-        
+                hwpml += self._process_list_item(nested_item, template, char_shape, top_level_counter, is_top_level=False, counter=counter)        
         return hwpml
 
     
