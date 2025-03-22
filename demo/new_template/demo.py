@@ -14,13 +14,16 @@ class HWPMLConverter:
         self.field_id_counter = 0
         self.inst_id_counter = 1000000
 
-        # 순서대로 매핑할 마크다운 요소 목록
+        # 순서대로 매핑할 마크다운 요소 목록 (순서있는 리스트 제거)
         self.style_mapping_order = [
-            'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'ul', 'ol', 'a', 'strong', 'em'
+            'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'ul', 'a', 'strong', 'em'
         ]
 
         # 템플릿 스타일 정보를 저장할 딕셔너리
         self.template_styles = {key: None for key in self.style_mapping_order}
+        
+        # 순서 없는 리스트에 사용할 글머리표 특수기호
+        self.bullet_symbol = "•"  # 기본 글머리표
         
     def load_template(self, template_path):
         """HWPML 템플릿 파일을 로드하고 서식 구조 추출"""
@@ -62,6 +65,12 @@ class HWPMLConverter:
                     'has_table': '<TABLE' in tag_structure,
                     'has_field': '<FIELDBEGIN' in tag_structure
                 }
+                
+                # 순서 없는 리스트에서 글머리표 추출
+                if style_key == 'ul':
+                    bullet = self._extract_bullet_symbol(tag_structure)
+                    if bullet:
+                        self.bullet_symbol = bullet
         
         # 템플릿 스타일 매핑 결과 출력
         print("추출된 템플릿 스타일 매핑:")
@@ -70,6 +79,25 @@ class HWPMLConverter:
                 print(f"  {key}: ParaShape={value['para_shape']}, CharShape={value['char_shape']}")
             else:
                 print(f"  {key}: 매핑 없음")
+        
+        print(f"  추출된 글머리표 기호: '{self.bullet_symbol}'")
+    
+    def _extract_bullet_symbol(self, structure):
+        """순서 없는 리스트 구조에서 글머리표 특수기호 추출"""
+        # CHAR 태그 내용에서 첫 번째 특수기호 추출
+        char_pattern = re.compile(r'<CHAR>(.*?)</CHAR>')
+        match = char_pattern.search(structure)
+        
+        if match:
+            content = match.group(1).strip()
+            # 콘텐츠의 첫 번째 문자가 특수기호일 가능성이 높음
+            if content and not content[0].isalnum():
+                # 기호와 다음 텍스트 사이의 공백 처리
+                bullet_parts = re.match(r'([^\w\s]+)(\s*)(.*)', content)
+                if bullet_parts:
+                    return bullet_parts.group(1)  # 특수기호만 반환
+        
+        return None
     
     def _extract_balanced_p_tags(self, content):
         """균형 잡힌 P 태그 쌍을 순서대로 추출"""
@@ -185,8 +213,9 @@ class HWPMLConverter:
                     })
             elif tag.name in ['ul', 'ol']:
                 elements.append({
-                    'type': tag.name,
-                    'items': self._extract_list_items(tag)
+                    'type': 'ul',  # 순서 있는/없는 리스트 모두 ul로 처리
+                    'items': self._extract_list_items(tag),
+                    'is_ordered': tag.name == 'ol'  # 순서 있는 리스트 여부 저장
                 })
             elif tag.name == 'table':
                 elements.append({
@@ -228,12 +257,82 @@ class HWPMLConverter:
         return fragments
     
     def _extract_list_items(self, list_tag):
-        """목록 항목 추출"""
+        """리스트 항목 추출 (중첩 리스트 지원)"""
         items = []
         
+        # 리스트 종류 확인 (순서 있는/없는)
+        is_ordered = list_tag.name == 'ol'
+        
         for li in list_tag.find_all('li', recursive=False):
-            # 목록 항목 텍스트 추출
-            items.append(li.get_text())
+            # 항목 콘텐츠 추출
+            item_content = ""
+            nested_lists = []
+            
+            # 텍스트와 중첩 리스트 분리
+            for child in li.children:
+                if isinstance(child, NavigableString):
+                    item_content += str(child)
+                elif child.name not in ['ul', 'ol']:
+                    item_content += child.get_text()
+                else:
+                    # 중첩 리스트 저장
+                    nested_lists.append(child)
+            
+            # 항목 정보 저장
+            item_info = {
+                'content': item_content.strip(),
+                'is_ordered': is_ordered,
+                'level': 0  # 최상위 수준
+            }
+            
+            # 중첩 리스트가 있으면 재귀적으로 처리
+            if nested_lists:
+                item_info['nested_items'] = []
+                for nested_list in nested_lists:
+                    nested_items = self._extract_nested_list_items(nested_list, 1)  # 중첩 레벨 1부터 시작
+                    item_info['nested_items'].extend(nested_items)
+            
+            items.append(item_info)
+        
+        return items
+    
+    def _extract_nested_list_items(self, list_tag, level):
+        """중첩 리스트 항목 추출 (재귀적)"""
+        items = []
+        
+        # 리스트 종류 확인
+        is_ordered = list_tag.name == 'ol'
+        
+        for li in list_tag.find_all('li', recursive=False):
+            # 항목 콘텐츠 추출
+            item_content = ""
+            nested_lists = []
+            
+            # 텍스트와 중첩 리스트 분리
+            for child in li.children:
+                if isinstance(child, NavigableString):
+                    item_content += str(child)
+                elif child.name not in ['ul', 'ol']:
+                    item_content += child.get_text()
+                else:
+                    # 중첩 리스트 저장
+                    nested_lists.append(child)
+            
+            # 항목 정보 저장
+            item_info = {
+                'content': item_content.strip(),
+                'is_ordered': is_ordered,
+                'level': level  # 현재 중첩 레벨
+            }
+            
+            # 중첩 리스트가 있으면 재귀적으로 처리
+            if nested_lists:
+                item_info['nested_items'] = []
+                for nested_list in nested_lists:
+                    nested_items = self._extract_nested_list_items(nested_list, level + 1)  # 중첩 레벨 증가
+                    item_info['nested_items'].extend(nested_items)
+            
+            items.append(item_info)
         
         return items
     
@@ -296,7 +395,7 @@ class HWPMLConverter:
                 else:
                     # 단순 단락
                     hwpml += self._insert_text_into_template(template_style['structure'], element['content'])
-            elif element_type in ['ul', 'ol']:
+            elif element_type == 'ul':
                 hwpml += self._convert_list_to_hwpml(element, template_style)
             elif element_type == 'table':
                 if template_style['has_table']:
@@ -399,18 +498,63 @@ class HWPMLConverter:
         return template
     
     def _convert_list_to_hwpml(self, list_element, template_style):
-        """목록을 HWPML로 변환 (글머리표/번호 중복 추가 없이)"""
-        items = list_element['items']
+        """리스트를 HWPML로 변환 (특수기호 활용 및 중첩 리스트 지원)"""
         hwpml = ""
+        ul_template = template_style['structure']
+        para_shape_base = int(template_style['para_shape'])
+        char_shape = template_style['char_shape']
         
-        # 템플릿 구조 가져오기
-        template = template_style['structure']
+        # 모든 리스트 항목 처리 (최상위 레벨부터)
+        for item in list_element['items']:
+            hwpml += self._process_list_item(item, ul_template, para_shape_base, char_shape)
         
-        # 각 목록 항목 처리
-        for item in items:
-            # 템플릿에 텍스트만 삽입 (글머리표/번호 추가하지 않음)
-            item_hwpml = self._insert_text_into_template(template, item)
-            hwpml += item_hwpml
+        return hwpml
+    
+    def _process_list_item(self, item, template, para_shape_base, char_shape, counter=None):
+        """리스트 항목 처리 (재귀 호출로 중첩 리스트 지원)"""
+        hwpml = ""
+        content = item['content']
+        level = item.get('level', 0)
+        is_ordered = item.get('is_ordered', False)
+        
+        # 들여쓰기 레벨에 따라 ParaShape 조정
+        para_shape = str(para_shape_base + level)
+        
+        # 템플릿 구조에서 P 태그와 ParaShape 속성 추출 및 수정
+        p_tag_pattern = re.compile(r'<P ParaShape="\d+"')
+        template_with_level = p_tag_pattern.sub(f'<P ParaShape="{para_shape}"', template)
+        
+        # 항목 번호/기호 생성
+        if is_ordered:
+            # 순서 있는 리스트 (번호)
+            if counter is None:
+                counter = {}
+            if level not in counter:
+                counter[level] = 1
+            else:
+                counter[level] += 1
+                
+            prefix = f"{counter[level]}. "
+        else:
+            # 순서 없는 리스트 (글머리표)
+            prefix = f"{self.bullet_symbol} "
+        
+        # 최종 항목 텍스트 생성
+        item_text = prefix + content
+        
+        # 템플릿에 텍스트 삽입
+        hwpml += self._insert_text_into_template(template_with_level, item_text)
+        
+        # 중첩 항목 처리 (있는 경우)
+        if 'nested_items' in item and item['nested_items']:
+            for nested_item in item['nested_items']:
+                hwpml += self._process_list_item(
+                    nested_item, 
+                    template, 
+                    para_shape_base, 
+                    char_shape, 
+                    counter
+                )
         
         return hwpml
     
