@@ -9,7 +9,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QTextEdit, QPushButton
                              QFileDialog, QVBoxLayout, QHBoxLayout, QWidget, QStatusBar,
                              QLabel, QComboBox, QTabWidget, QFormLayout, QGroupBox,
                              QLineEdit, QSpinBox, QCheckBox, QColorDialog, QDialog,
-                             QFontComboBox)
+                             QFontComboBox, QScrollArea)
 from PySide6.QtGui import QIcon, QFont, QColor
 from PySide6.QtCore import Qt
 from md_to_hwp.converter import HWPMLConverter
@@ -111,10 +111,19 @@ class TemplateEditDialog(QDialog):
     
     def create_headings_tab(self):
         """제목 탭 생성"""
-        self.headings_layout = QVBoxLayout(self.headings_tab)
+        # 스크롤 영역 생성
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        
+        # 메인 컨테이너 위젯 생성
+        container = QWidget()
+        self.headings_layout = QVBoxLayout(container)
+        self.headings_layout.setSpacing(10)  # 그룹박스 간 간격 설정
         
         # 제목 1 (H1) 그룹
         self.h1_group = QGroupBox("제목 1 (# )")
+        self.h1_group.setFixedHeight(200)  # 고정 높이 설정
         h1_layout = QFormLayout(self.h1_group)
         
         h1_tmpl = self.template_data.get("heading1", {})
@@ -152,6 +161,7 @@ class TemplateEditDialog(QDialog):
         
         # 제목 2 (H2) 그룹
         self.h2_group = QGroupBox("제목 2 (## )")
+        self.h2_group.setFixedHeight(200)
         h2_layout = QFormLayout(self.h2_group)
         
         h2_tmpl = self.template_data.get("heading2", {})
@@ -194,6 +204,7 @@ class TemplateEditDialog(QDialog):
         
         # 제목 3 (H3) 그룹
         self.h3_group = QGroupBox("제목 3 (### )")
+        self.h3_group.setFixedHeight(200)
         h3_layout = QFormLayout(self.h3_group)
         
         h3_tmpl = self.template_data.get("heading3", {})
@@ -229,10 +240,134 @@ class TemplateEditDialog(QDialog):
         style_layout.addWidget(self.h3_underline)
         h3_layout.addRow("스타일:", style_layout)
         
+        # 제목 4 (H4) 그룹
+        self.h4_group = QGroupBox("제목 4 (#### )")
+        self.h4_group.setFixedHeight(200)
+        h4_layout = QFormLayout(self.h4_group)
+        
+        h4_tmpl = self.template_data.get("heading4", {})
+        self.h4_prefix = QLineEdit(h4_tmpl.get("prefix", "#### "))
+        
+        self.h4_font = QFontComboBox()
+        self.h4_font.setCurrentFont(QFont(h4_tmpl.get("font", "맑은 고딕")))
+        
+        self.h4_size = QSpinBox()
+        self.h4_size.setRange(8, 72)
+        self.h4_size.setValue(h4_tmpl.get("size", 13))
+        
+        self.h4_color_btn = ColorButton(h4_tmpl.get("color", "#000000"))
+        
+        # 스타일 체크박스
+        self.h4_bold = QCheckBox("굵게")
+        self.h4_bold.setChecked(h4_tmpl.get("bold", True))
+        self.h4_italic = QCheckBox("기울임")
+        self.h4_italic.setChecked(h4_tmpl.get("italic", False))
+        self.h4_underline = QCheckBox("밑줄")
+        self.h4_underline.setChecked(h4_tmpl.get("underline", False))
+        
+        # 폼에 추가
+        h4_layout.addRow("기호:", self.h4_prefix)
+        h4_layout.addRow("글꼴:", self.h4_font)
+        h4_layout.addRow("크기:", self.h4_size)
+        h4_layout.addRow("색상:", self.h4_color_btn)
+        
+        # 스타일 설정을 가로로 배치
+        style_layout = QHBoxLayout()
+        style_layout.addWidget(self.h4_bold)
+        style_layout.addWidget(self.h4_italic)
+        style_layout.addWidget(self.h4_underline)
+        h4_layout.addRow("스타일:", style_layout)
+        
+        # 제목 5 (H5) 그룹
+        self.h5_group = QGroupBox("제목 5 (##### )")
+        self.h5_group.setFixedHeight(200)
+        h5_layout = QFormLayout(self.h5_group)
+        
+        h5_tmpl = self.template_data.get("heading5", {})
+        self.h5_prefix = QLineEdit(h5_tmpl.get("prefix", "##### "))
+        
+        self.h5_font = QFontComboBox()
+        self.h5_font.setCurrentFont(QFont(h5_tmpl.get("font", "맑은 고딕")))
+        
+        self.h5_size = QSpinBox()
+        self.h5_size.setRange(8, 72)
+        self.h5_size.setValue(h5_tmpl.get("size", 12))
+        
+        self.h5_color_btn = ColorButton(h5_tmpl.get("color", "#000000"))
+        
+        # 스타일 체크박스
+        self.h5_bold = QCheckBox("굵게")
+        self.h5_bold.setChecked(h5_tmpl.get("bold", True))
+        self.h5_italic = QCheckBox("기울임")
+        self.h5_italic.setChecked(h5_tmpl.get("italic", False))
+        self.h5_underline = QCheckBox("밑줄")
+        self.h5_underline.setChecked(h5_tmpl.get("underline", False))
+        
+        # 폼에 추가
+        h5_layout.addRow("기호:", self.h5_prefix)
+        h5_layout.addRow("글꼴:", self.h5_font)
+        h5_layout.addRow("크기:", self.h5_size)
+        h5_layout.addRow("색상:", self.h5_color_btn)
+        
+        # 스타일 설정을 가로로 배치
+        style_layout = QHBoxLayout()
+        style_layout.addWidget(self.h5_bold)
+        style_layout.addWidget(self.h5_italic)
+        style_layout.addWidget(self.h5_underline)
+        h5_layout.addRow("스타일:", style_layout)
+        
+        # 제목 6 (H6) 그룹
+        self.h6_group = QGroupBox("제목 6 (###### )")
+        self.h6_group.setFixedHeight(200)
+        h6_layout = QFormLayout(self.h6_group)
+        
+        h6_tmpl = self.template_data.get("heading6", {})
+        self.h6_prefix = QLineEdit(h6_tmpl.get("prefix", "###### "))
+        
+        self.h6_font = QFontComboBox()
+        self.h6_font.setCurrentFont(QFont(h6_tmpl.get("font", "맑은 고딕")))
+        
+        self.h6_size = QSpinBox()
+        self.h6_size.setRange(8, 72)
+        self.h6_size.setValue(h6_tmpl.get("size", 11))
+        
+        self.h6_color_btn = ColorButton(h6_tmpl.get("color", "#000000"))
+        
+        # 스타일 체크박스
+        self.h6_bold = QCheckBox("굵게")
+        self.h6_bold.setChecked(h6_tmpl.get("bold", True))
+        self.h6_italic = QCheckBox("기울임")
+        self.h6_italic.setChecked(h6_tmpl.get("italic", False))
+        self.h6_underline = QCheckBox("밑줄")
+        self.h6_underline.setChecked(h6_tmpl.get("underline", False))
+        
+        # 폼에 추가
+        h6_layout.addRow("기호:", self.h6_prefix)
+        h6_layout.addRow("글꼴:", self.h6_font)
+        h6_layout.addRow("크기:", self.h6_size)
+        h6_layout.addRow("색상:", self.h6_color_btn)
+        
+        # 스타일 설정을 가로로 배치
+        style_layout = QHBoxLayout()
+        style_layout.addWidget(self.h6_bold)
+        style_layout.addWidget(self.h6_italic)
+        style_layout.addWidget(self.h6_underline)
+        h6_layout.addRow("스타일:", style_layout)
+        
         # 레이아웃에 추가
         self.headings_layout.addWidget(self.h1_group)
         self.headings_layout.addWidget(self.h2_group)
         self.headings_layout.addWidget(self.h3_group)
+        self.headings_layout.addWidget(self.h4_group)
+        self.headings_layout.addWidget(self.h5_group)
+        self.headings_layout.addWidget(self.h6_group)
+        
+        # 스크롤 영역에 컨테이너 설정
+        scroll.setWidget(container)
+        
+        # 메인 레이아웃에 스크롤 영역 추가
+        main_layout = QVBoxLayout(self.headings_tab)
+        main_layout.addWidget(scroll)
     
     def create_lists_tab(self):
         """목록 탭 생성"""
@@ -480,6 +615,45 @@ class TemplateEditDialog(QDialog):
             "paraShape": "0",
             "template_type": "normal",
             "charShape": "3"
+        }
+        
+        self.template_data["heading4"] = {
+            "prefix": self.h4_prefix.text(),
+            "font": self.h4_font.currentFont().family(),
+            "size": self.h4_size.value(),
+            "color": self.h4_color_btn.color,
+            "bold": self.h4_bold.isChecked(),
+            "italic": self.h4_italic.isChecked(),
+            "underline": self.h4_underline.isChecked(),
+            "paraShape": "0",
+            "template_type": "normal",
+            "charShape": "4"
+        }
+        
+        self.template_data["heading5"] = {
+            "prefix": self.h5_prefix.text(),
+            "font": self.h5_font.currentFont().family(),
+            "size": self.h5_size.value(),
+            "color": self.h5_color_btn.color,
+            "bold": self.h5_bold.isChecked(),
+            "italic": self.h5_italic.isChecked(),
+            "underline": self.h5_underline.isChecked(),
+            "paraShape": "0",
+            "template_type": "normal",
+            "charShape": "5"
+        }
+        
+        self.template_data["heading6"] = {
+            "prefix": self.h6_prefix.text(),
+            "font": self.h6_font.currentFont().family(),
+            "size": self.h6_size.value(),
+            "color": self.h6_color_btn.color,
+            "bold": self.h6_bold.isChecked(),
+            "italic": self.h6_italic.isChecked(),
+            "underline": self.h6_underline.isChecked(),
+            "paraShape": "0",
+            "template_type": "normal",
+            "charShape": "6"
         }
         
         # 목록 설정
