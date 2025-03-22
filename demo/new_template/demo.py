@@ -257,83 +257,85 @@ class HWPMLConverter:
         return fragments
     
     def _extract_list_items(self, list_tag):
-        """리스트 항목 추출 (중첩 리스트 지원)"""
         items = []
-        
-        # 리스트 종류 확인 (순서 있는/없는)
         is_ordered = list_tag.name == 'ol'
-        
+
         for li in list_tag.find_all('li', recursive=False):
-            # 항목 콘텐츠 추출
-            item_content = ""
+            item_fragments = []
             nested_lists = []
-            
-            # 텍스트와 중첩 리스트 분리
+
             for child in li.children:
                 if isinstance(child, NavigableString):
-                    item_content += str(child)
+                    text = str(child).strip()
+                    if text:
+                        item_fragments.append({'type': 'text', 'content': text})
+                elif child.name in ['strong', 'b']:
+                    item_fragments.append({'type': 'strong', 'content': child.get_text()})
+                elif child.name in ['em', 'i']:
+                    item_fragments.append({'type': 'em', 'content': child.get_text()})
+                elif child.name == 'a':
+                    item_fragments.append({'type': 'a', 'content': child.get_text(), 'href': child.get('href', '')})
                 elif child.name not in ['ul', 'ol']:
-                    item_content += child.get_text()
+                    text = child.get_text().strip()
+                    if text:
+                        item_fragments.append({'type': 'text', 'content': text})
                 else:
-                    # 중첩 리스트 저장
                     nested_lists.append(child)
-            
-            # 항목 정보 저장
+
             item_info = {
-                'content': item_content.strip(),
+                'fragments': item_fragments,
                 'is_ordered': is_ordered,
-                'level': 0  # 최상위 수준
+                'level': 0
             }
-            
-            # 중첩 리스트가 있으면 재귀적으로 처리
+
             if nested_lists:
                 item_info['nested_items'] = []
                 for nested_list in nested_lists:
-                    nested_items = self._extract_nested_list_items(nested_list, 1)  # 중첩 레벨 1부터 시작
+                    nested_items = self._extract_nested_list_items(nested_list, 1)
                     item_info['nested_items'].extend(nested_items)
-            
+
             items.append(item_info)
-        
         return items
     
     def _extract_nested_list_items(self, list_tag, level):
-        """중첩 리스트 항목 추출 (재귀적)"""
         items = []
-        
-        # 리스트 종류 확인
         is_ordered = list_tag.name == 'ol'
-        
+
         for li in list_tag.find_all('li', recursive=False):
-            # 항목 콘텐츠 추출
-            item_content = ""
+            item_fragments = []
             nested_lists = []
-            
-            # 텍스트와 중첩 리스트 분리
+
             for child in li.children:
                 if isinstance(child, NavigableString):
-                    item_content += str(child)
+                    text = str(child).strip()
+                    if text:
+                        item_fragments.append({'type': 'text', 'content': text})
+                elif child.name in ['strong', 'b']:
+                    item_fragments.append({'type': 'strong', 'content': child.get_text()})
+                elif child.name in ['em', 'i']:
+                    item_fragments.append({'type': 'em', 'content': child.get_text()})
+                elif child.name == 'a':
+                    item_fragments.append({'type': 'a', 'content': child.get_text(), 'href': child.get('href', '')})
                 elif child.name not in ['ul', 'ol']:
-                    item_content += child.get_text()
+                    text = child.get_text().strip()
+                    if text:
+                        item_fragments.append({'type': 'text', 'content': text})
                 else:
-                    # 중첩 리스트 저장
                     nested_lists.append(child)
-            
-            # 항목 정보 저장
+
             item_info = {
-                'content': item_content.strip(),
+                'fragments': item_fragments,
                 'is_ordered': is_ordered,
-                'level': level  # 현재 중첩 레벨
+                'level': level
             }
-            
-            # 중첩 리스트가 있으면 재귀적으로 처리
+
             if nested_lists:
                 item_info['nested_items'] = []
                 for nested_list in nested_lists:
-                    nested_items = self._extract_nested_list_items(nested_list, level + 1)  # 중첩 레벨 증가
+                    nested_items = self._extract_nested_list_items(nested_list, level + 1)
                     item_info['nested_items'].extend(nested_items)
-            
+
             items.append(item_info)
-        
         return items
     
     def _extract_table_rows(self, table_tag):
@@ -513,48 +515,86 @@ class HWPMLConverter:
 
 
     def _process_list_item(self, item, template, char_shape, counter=None):
-        """리스트 항목 처리 (재귀 호출로 중첩 리스트 지원)"""
         hwpml = ""
-        content = item['content']
+        fragments = item['fragments']
         level = item.get('level', 0)
         is_ordered = item.get('is_ordered', False)
-
-        # counter 초기화
+        
         if counter is None:
             counter = {}
-
-        # 템플릿에서 P 태그 가져오기
+        
+        # 템플릿에서 P 태그 속성 추출
         p_tag_match = re.search(r'<P\s+([^>]+)>', template)
-        p_attributes = p_tag_match.group(1) if p_tag_match else 'Style="0"'  # 기본 Style 사용
-
-        # 기호 결정
+        p_attributes = p_tag_match.group(1) if p_tag_match else 'Style="0"'
+        
+        # 접두사 생성
         if is_ordered:
-            # 순서 있는 리스트 (번호)
             if level not in counter:
-                counter[level] = 1  # 새로운 레벨이면 1로 초기화
+                counter[level] = 1
             else:
-                counter[level] += 1  # 기존 레벨이면 1 증가
+                counter[level] += 1
             prefix = f"{counter[level]}. "
         else:
-            # 순서 없는 리스트 (글머리표)
             prefix = f"{self.bullet_symbol} " if self.bullet_symbol else "• "
-
-        # 중첩 레벨에 따른 들여쓰기 공백 추가 (레벨당 스페이스 2개)
+        
+        # 들여쓰기
         indent = "  " * level
-
-        # 새로운 CHAR 태그 내용 생성 (들여쓰기 + 기호 + 내용)
-        new_char_content = f"{indent}{prefix}{content}"
-
-        # 모든 CHAR 태그 제거하고 새로운 P 태그 생성
-        hwpml += f'<P {p_attributes}><TEXT CharShape="{char_shape}"><CHAR>{new_char_content}</CHAR></TEXT></P>'
-
-        # 중첩 항목 처리 (있는 경우)
+        
+        # 단락 시작
+        hwpml += f'<P {p_attributes}>'
+        
+        # 접두사 추가 (기본 char_shape 사용)
+        hwpml += f'<TEXT CharShape="{char_shape}"><CHAR>{indent}{prefix}</CHAR></TEXT>'
+        
+        # 서식 스타일 가져오기
+        strong_style = self.template_styles.get('strong')
+        em_style = self.template_styles.get('em')
+        a_style = self.template_styles.get('a')
+        
+        strong_char_shape = strong_style['char_shape'] if strong_style else "8"
+        em_char_shape = em_style['char_shape'] if em_style else "9"
+        link_char_shape = a_style['char_shape'] if a_style else "10"
+        
+        # 각 조각 처리
+        for fragment in fragments:
+            fragment_type = fragment['type']
+            content = fragment['content']
+            
+            if fragment_type == 'text':
+                hwpml += f'<TEXT CharShape="{char_shape}"><CHAR>{content}</CHAR></TEXT>'
+            elif fragment_type == 'strong':
+                hwpml += f'<TEXT CharShape="{strong_char_shape}"><CHAR>{content}</CHAR></TEXT>'
+            elif fragment_type == 'em':
+                hwpml += f'<TEXT CharShape="{em_char_shape}"><CHAR>{content}</CHAR></TEXT>'
+            elif fragment_type == 'a':
+                if a_style and a_style.get('has_field', False):
+                    field_id = str(self.field_id_counter + 1)
+                    inst_id = str(self.inst_id_counter + 1)
+                    self.field_id_counter += 1
+                    self.inst_id_counter += 1
+                    
+                    href = fragment.get('href', '')
+                    href = href.replace('/', '\\/')
+                    command = f"{href};1;0;0;"
+                    
+                    hwpml += f'<TEXT CharShape="{link_char_shape}">'
+                    hwpml += f'<FIELDBEGIN Command="{command}" Dirty="true" Editable="false" FieldId="{field_id}" InstId="{inst_id}" Property="0" Type="Hyperlink"/>'
+                    hwpml += '</TEXT>'
+                    hwpml += f'<TEXT CharShape="{link_char_shape}"><CHAR>{content}</CHAR></TEXT>'
+                    hwpml += f'<TEXT CharShape="{link_char_shape}">'
+                    hwpml += f'<FIELDEND Editable="false" FieldId="{field_id}" Property="0" Type="Hyperlink"/>'
+                    hwpml += '</TEXT>'
+                else:
+                    hwpml += f'<TEXT CharShape="{link_char_shape}"><CHAR>{content}</CHAR></TEXT>'
+        
+        # 단락 종료
+        hwpml += '</P>'
+        
+        # 중첩 항목 처리
         if 'nested_items' in item and item['nested_items']:
             for nested_item in item['nested_items']:
-                hwpml += self._process_list_item(
-                    nested_item, template, char_shape, counter
-                )
-
+                hwpml += self._process_list_item(nested_item, template, char_shape, counter)
+        
         return hwpml
 
     
