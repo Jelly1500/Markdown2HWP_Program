@@ -1,7 +1,7 @@
 import sys
 import re
 import io
-import markdown
+import mistune
 import os
 import xml.etree.ElementTree as ET
 from bs4 import BeautifulSoup, NavigableString
@@ -158,8 +158,7 @@ class HWPMLConverter:
             raise ValueError("템플릿이 로드되지 않았습니다. 먼저 load_template() 호출 필요")
         
         # 마크다운을 HTML로 변환
-        html = markdown.markdown(md_text, extensions=['fenced_code', 'tables'], tab_length=2)
-        
+        html = mistune.html(md_text)        
         # HTML 파싱
         soup = BeautifulSoup(html, 'html.parser')
         
@@ -523,8 +522,6 @@ class HWPMLConverter:
         level = item.get('level', 0)
         is_ordered = item.get('is_ordered', False)
         
-       
-        
         # 템플릿에서 P 태그 속성 추출
         p_tag_match = re.search(r'<P\s+([^>]+)>', template)
         p_attributes = p_tag_match.group(1) if p_tag_match else 'Style="0"'
@@ -532,12 +529,12 @@ class HWPMLConverter:
         # 접두사 생성
         if is_ordered:
             if is_top_level:
-                # 최상단 리스트면 top_level_counter 사용
+                # 최상위 리스트면 top_level_counter 사용
                 prefix = f"{top_level_counter}. "
             else:
-                # 중첩 리스트면 레벨별 카운터 사용
+                # 중첩 리스트면 레벨별 카운터 사용, 새 레벨 시작 시 초기화
                 if level not in counter:
-                    counter[level] = 1
+                    counter[level] = 1  # 새로운 레벨 시작 시 1로 초기화
                 prefix = f"{counter[level]}. "
                 counter[level] += 1
         else:
@@ -598,8 +595,11 @@ class HWPMLConverter:
         
         # 중첩 항목 처리
         if 'nested_items' in item and item['nested_items']:
+            # 중첩 리스트 처리 전에 새 counter 전달 (레벨별 독립성 보장)
+            nested_counter = {}
             for nested_item in item['nested_items']:
-                hwpml += self._process_list_item(nested_item, template, char_shape, top_level_counter, is_top_level=False, counter=counter)        
+                hwpml += self._process_list_item(nested_item, template, char_shape, top_level_counter, is_top_level=False, counter=nested_counter)
+        
         return hwpml
 
     
