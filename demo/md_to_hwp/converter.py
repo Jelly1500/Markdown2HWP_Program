@@ -223,6 +223,7 @@ class HWPMLConverter:
         current_tmpl = self.template_manager.get_current_template()
         para_tmpl = current_tmpl.get("paragraph", {})
         para_shape = para_tmpl.get("paraShape", "0")
+        char_shape = para_tmpl.get("charShape", "0")  # 일반 텍스트의 charShape
 
         hwpml = f'<P ParaShape="{para_shape}" Style="0">'
         has_content = False
@@ -231,24 +232,22 @@ class HWPMLConverter:
             if isinstance(child, NavigableString):
                 text = str(child)
                 if text:
-                    # 일반 텍스트에는 paragraph 스타일의 charShape="0" 사용
-                    hwpml += f'<TEXT CharShape="0"><CHAR>{text}</CHAR></TEXT>'
+                    hwpml += f'<TEXT CharShape="{char_shape}"><CHAR>{text}</CHAR></TEXT>'
                     has_content = True
             elif child.name == 'a':
-                # 링크에는 link 스타일의 charShape="8" 사용
                 hwpml += self.convert_a_to_hwpml(child)
                 has_content = True
             elif child.name in ['b', 'strong']:
-                # 굵게에는 bold 스타일의 charShape="6" 사용
-                hwpml += f'<TEXT CharShape="6"><CHAR>{child.text}</CHAR></TEXT>'
+                # 굵게에는 bold 스타일만 적용하고 나머지는 일반 텍스트 속성 사용
+                hwpml += f'<TEXT CharShape="{char_shape}"><BOLD/><CHAR>{child.text}</CHAR></TEXT>'
                 has_content = True
             elif child.name in ['i', 'em']:
-                # 기울임에는 italic 스타일의 charShape="7" 사용
-                hwpml += f'<TEXT CharShape="7"><CHAR>{child.text}</CHAR></TEXT>'
+                # 기울임에는 italic 스타일만 적용하고 나머지는 일반 텍스트 속성 사용
+                hwpml += f'<TEXT CharShape="{char_shape}"><ITALIC/><CHAR>{child.text}</CHAR></TEXT>'
                 has_content = True
 
         if not has_content:
-            hwpml += '<TEXT CharShape="0"/>'
+            hwpml += f'<TEXT CharShape="{char_shape}"/>'
 
         hwpml += '</P>\n'
         return hwpml
@@ -420,32 +419,32 @@ class HWPMLConverter:
         if cell is None:
             return '<TEXT CharShape="0"><CHAR>&#160;</CHAR></TEXT>'  # 빈 셀
 
-        # 셀에서 직접 HTML 내용 추출 (text가 아닌 내부 태그 포함)
-        hwpml = ''
+        current_tmpl = self.template_manager.get_current_template()
+        para_tmpl = current_tmpl.get("paragraph", {})
+        char_shape = para_tmpl.get("charShape", "0")  # 일반 텍스트의 charShape
 
         # 내용이 없으면 빈 태그 반환
         if len(list(cell.children)) == 0:
             content = cell.string if cell.string else "&#160;"
-            return f'<TEXT CharShape="0"><CHAR>{content}</CHAR></TEXT>'
+            return f'<TEXT CharShape="{char_shape}"><CHAR>{content}</CHAR></TEXT>'
 
         # 내용 처리
+        hwpml = ''
         for child in cell.children:
             if isinstance(child, NavigableString):
                 text = str(child).strip()
                 if text:
-                    # 일반 텍스트에는 charShape="0" 사용
-                    hwpml += f'<TEXT CharShape="0"><CHAR>{text}</CHAR></TEXT>'
+                    hwpml += f'<TEXT CharShape="{char_shape}"><CHAR>{text}</CHAR></TEXT>'
             elif child.name == 'strong' or child.name == 'b':
-                # 굵게에는 charShape="6" 사용
-                hwpml += f'<TEXT CharShape="6"><CHAR>{child.get_text()}</CHAR></TEXT>'
+                # 굵게에는 bold 스타일만 적용하고 나머지는 일반 텍스트 속성 사용
+                hwpml += f'<TEXT CharShape="{char_shape}"><BOLD/><CHAR>{child.get_text()}</CHAR></TEXT>'
             elif child.name == 'em' or child.name == 'i':
-                # 기울임에는 charShape="7" 사용
-                hwpml += f'<TEXT CharShape="7"><CHAR>{child.get_text()}</CHAR></TEXT>'
+                # 기울임에는 italic 스타일만 적용하고 나머지는 일반 텍스트 속성 사용
+                hwpml += f'<TEXT CharShape="{char_shape}"><ITALIC/><CHAR>{child.get_text()}</CHAR></TEXT>'
             elif child.name == 'a':
-                # 링크에는 charShape="8" 사용 (convert_a_to_hwpml 함수 호출)
                 hwpml += self.convert_a_to_hwpml(child)
 
-        return hwpml if hwpml else '<TEXT CharShape="0"><CHAR>&#160;</CHAR></TEXT>'
+        return hwpml if hwpml else f'<TEXT CharShape="{char_shape}"><CHAR>&#160;</CHAR></TEXT>'
 
     def save_to_file(self, hwpml, file_path):
         """HWPML을 파일로 저장"""
