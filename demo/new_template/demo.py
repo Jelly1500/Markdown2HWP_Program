@@ -59,7 +59,8 @@ class HWPMLConverter:
                     'structure': tag_structure,
                     'para_shape': self._extract_para_shape(tag_structure),
                     'char_shape': self._extract_char_shape(tag_structure),
-                    'has_table': '<TABLE' in tag_structure
+                    'has_table': '<TABLE' in tag_structure,
+                    'has_field': '<FIELDBEGIN' in tag_structure
                 }
         
         # 템플릿 스타일 매핑 결과 출력
@@ -166,20 +167,21 @@ class HWPMLConverter:
                     'content': tag.get_text()
                 })
             elif tag.name == 'p':
-                # 단락 내부의 강조 요소 처리
+                # 단락 내부의 강조 요소 확인
                 if tag.find(['strong', 'b', 'em', 'i', 'a']):
-                    # 복합 단락: 강조 요소가 있는 경우
-                    para_content = self._extract_paragraph_fragments(tag)
+                    # 강조 요소가 있는 복합 단락
                     elements.append({
                         'type': 'p',
                         'content': tag.get_text(),
-                        'fragments': para_content
+                        'has_formatting': True,
+                        'fragments': self._extract_paragraph_fragments(tag)
                     })
                 else:
                     # 단순 단락
                     elements.append({
                         'type': 'p',
-                        'content': tag.get_text()
+                        'content': tag.get_text(),
+                        'has_formatting': False
                     })
             elif tag.name in ['ul', 'ol']:
                 elements.append({
@@ -195,13 +197,13 @@ class HWPMLConverter:
         return elements
     
     def _extract_paragraph_fragments(self, p_tag):
-        """단락 내 텍스트와 강조 요소 추출"""
+        """단락 내 텍스트와 강조 요소를 조각으로 추출"""
         fragments = []
         
         for child in p_tag.children:
             if isinstance(child, NavigableString):
-                text = str(child).strip()
-                if text:
+                text = str(child)
+                if text:  # 빈 문자열이 아닌 경우에만 추가
                     fragments.append({
                         'type': 'text',
                         'content': text
@@ -285,8 +287,15 @@ class HWPMLConverter:
                     continue
             
             # 요소 유형에 따른 변환
-            if element_type in ['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p']:
+            if element_type in ['h1', 'h2', 'h3', 'h4', 'h5', 'h6']:
                 hwpml += self._insert_text_into_template(template_style['structure'], element['content'])
+            elif element_type == 'p':
+                if element.get('has_formatting', False):
+                    # 강조 요소가 있는 복합 단락
+                    hwpml += self._convert_formatted_paragraph(element, template_style)
+                else:
+                    # 단순 단락
+                    hwpml += self._insert_text_into_template(template_style['structure'], element['content'])
             elif element_type in ['ul', 'ol']:
                 hwpml += self._convert_list_to_hwpml(element, template_style)
             elif element_type == 'table':
@@ -294,6 +303,78 @@ class HWPMLConverter:
                     hwpml += self._convert_table_to_hwpml(element, template_style)
                 else:
                     hwpml += self._create_default_table_hwpml(element)
+        
+        return hwpml
+    
+    def _convert_formatted_paragraph(self, paragraph, template_style):
+        """강조 요소가 있는 단락을 변환 - 하나의 단락으로 유지"""
+        # 단락의 기본 서식 추출 (P 태그 시작 부분)
+        p_start_match = re.search(r'<P ParaShape="(\d+)"[^>]*>', template_style['structure'])
+        if not p_start_match:
+            return self._create_default_hwpml(paragraph)
+        
+        para_shape = p_start_match.group(1)
+        
+        # 기본 문자 모양 추출
+        normal_char_shape = template_style['char_shape']
+        
+        # 강조 요소 문자 모양 추출
+        strong_style = self.template_styles.get('strong')
+        em_style = self.template_styles.get('em')
+        a_style = self.template_styles.get('a')
+        
+        strong_char_shape = strong_style['char_shape'] if strong_style else "8"  # 기본 굵게 스타일
+        em_char_shape = em_style['char_shape'] if em_style else "9"  # 기본 기울임 스타일
+        link_char_shape = a_style['char_shape'] if a_style else "10"  # 기본 링크 스타일
+        
+        # 단락 시작
+        hwpml = f'<P ParaShape="{para_shape}" Style="0">'
+        
+        # 각 텍스트 조각 처리
+        for fragment in paragraph['fragments']:
+            fragment_type = fragment['type']
+            content = fragment['content']
+            
+            if fragment_type == 'text':
+                # 일반 텍스트
+                hwpml += f'<TEXT CharShape="{normal_char_shape}"><CHAR>{content}</CHAR></TEXT>'
+            elif fragment_type == 'strong':
+                # 굵은 텍스트
+                hwpml += f'<TEXT CharShape="{strong_char_shape}"><CHAR>{content}</CHAR></TEXT>'
+            elif fragment_type == 'em':
+                # 기울임 텍스트
+                hwpml += f'<TEXT CharShape="{em_char_shape}"><CHAR>{content}</CHAR></TEXT>'
+            elif fragment_type == 'a':
+                # 링크
+                if a_style and a_style.get('has_field', False):
+                    # 링크 필드 생성
+                    field_id = str(self.field_id_counter + 1)
+                    inst_id = str(self.inst_id_counter + 1)
+                    self.field_id_counter += 1
+                    self.inst_id_counter += 1
+                    
+                    href = fragment.get('href', '')
+                    href = href.replace('/', '\\/')
+                    command = f"{href};1;0;0;"
+                    
+                    # 링크 필드 시작
+                    hwpml += f'<TEXT CharShape="{link_char_shape}">'
+                    hwpml += f'<FIELDBEGIN Command="{command}" Dirty="true" Editable="false" FieldId="{field_id}" InstId="{inst_id}" Property="0" Type="Hyperlink"/>'
+                    hwpml += '</TEXT>'
+                    
+                    # 링크 텍스트
+                    hwpml += f'<TEXT CharShape="{link_char_shape}"><CHAR>{content}</CHAR></TEXT>'
+                    
+                    # 링크 필드 종료
+                    hwpml += f'<TEXT CharShape="{link_char_shape}">'
+                    hwpml += f'<FIELDEND Editable="false" FieldId="{field_id}" Property="0" Type="Hyperlink"/>'
+                    hwpml += '</TEXT>'
+                else:
+                    # 링크 필드가 없으면 일반 텍스트로 처리
+                    hwpml += f'<TEXT CharShape="{link_char_shape}"><CHAR>{content}</CHAR></TEXT>'
+        
+        # 단락 종료
+        hwpml += '</P>'
         
         return hwpml
     
@@ -318,8 +399,7 @@ class HWPMLConverter:
         return template
     
     def _convert_list_to_hwpml(self, list_element, template_style):
-        """목록을 HWPML로 변환"""
-        list_type = list_element['type']
+        """목록을 HWPML로 변환 (글머리표/번호 중복 추가 없이)"""
         items = list_element['items']
         hwpml = ""
         
@@ -327,15 +407,9 @@ class HWPMLConverter:
         template = template_style['structure']
         
         # 각 목록 항목 처리
-        for i, item in enumerate(items):
-            # 항목 번호/기호 생성
-            prefix = f"{i+1}. " if list_type == 'ol' else "• "
-            
-            # 항목 콘텐츠 생성
-            content = prefix + item
-            
-            # 템플릿에 텍스트 삽입
-            item_hwpml = self._insert_text_into_template(template, content)
+        for item in items:
+            # 템플릿에 텍스트만 삽입 (글머리표/번호 추가하지 않음)
+            item_hwpml = self._insert_text_into_template(template, item)
             hwpml += item_hwpml
         
         return hwpml
@@ -476,6 +550,12 @@ class HWPMLConverter:
         elif element_type == 'p':
             para_shape = "0"
             char_shape = "1"
+        elif element_type == 'strong':
+            para_shape = "0"
+            char_shape = "8"  # 굵은 텍스트 기본 스타일
+        elif element_type == 'em':
+            para_shape = "0"
+            char_shape = "9"  # 기울임 텍스트 기본 스타일
         else:
             para_shape = "0"
             char_shape = "0"
