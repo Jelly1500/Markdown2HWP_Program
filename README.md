@@ -1,12 +1,10 @@
-# 주간 보고서 보는 법
-- Wiki에 가면 Home 페이지에 주간 보고서 모음이 존재합니다.
-- 각 날짜에 맞는 주간보고서 페이지로 이동합니다.
+# main.py 실행 방법
 
-# 실행에 필요한 의존성 패키지
-
-- pip install Markdown
-- pip install beautifulsoup4
-- pip install PySide6
+1. 프로젝트를 클론해서 해당 폴더 위치에 터미널을 엽니다.
+2. python -m venv venv 명령어를 실행해서 가상환경을 생성합니다.
+3. .\venv\Scripts\activate 명령어를 실행하여 가상환경에 진입합니다.
+4. pip install -r requirements.txt 명령어를 실행해서 필요한 의존성들을 설치합니다. (단, requirements.txt가 존재하는 폴더로 이동하셔야 합니다.)
+5. main.py를 실행합니다.
 
 # 사용 방법 소개
 
