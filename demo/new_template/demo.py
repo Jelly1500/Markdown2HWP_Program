@@ -659,23 +659,24 @@ class HWPMLConverter:
     
     def _insert_text_into_template(self, template, text, preserve_prefix=True):
         """
-        텍스트를 템플릿의 CHAR 태그 내에 삽입. 
-        특수문자 접두어를 보존하는 옵션 추가
+        텍스트를 템플릿의 CHAR 태그 내에 삽입하고, 필요한 경우 셀 너비를 조정하여 줄바꿈을 방지합니다.
+        CHAR 태그가 없는 경우에는 TEXT 태그 내의 CHAR 태그를 대상으로 처리합니다.
         """
+        import re
+    
         # 모든 <CHAR>...</CHAR> 태그 찾기
         char_pattern = re.compile(r'<CHAR>(.*?)</CHAR>')
         matches = list(char_pattern.finditer(template))
-        
+    
         if matches:
-            # 각 매치의 그룹1(내용)의 길이를 비교하여 가장 긴 매치 선택
+            # CHAR 태그 처리 (셀 너비 조정 포함)
             longest_match = max(matches, key=lambda m: len(m.group(1)))
             start, end = longest_match.span()
             original_text = longest_match.group(1)
-            
+    
+            # 접두어 처리
             if preserve_prefix:
-                # 특수문자 접두어 추출 (첫 번째 공백 전까지의 문자)
                 prefix_match = re.match(r'^(\s*[^\w\s]+\s+)', original_text)
-                
                 if prefix_match:
                     prefix = prefix_match.group(1)
                     replacement = f'<CHAR>{prefix}{text}</CHAR>'
@@ -683,35 +684,88 @@ class HWPMLConverter:
                     replacement = f'<CHAR>{text}</CHAR>'
             else:
                 replacement = f'<CHAR>{text}</CHAR>'
-                
-            # 템플릿에서 해당 부분만 대체
-            new_template = template[:start] + replacement + template[end:]
+    
+            # 텍스트 길이 변화에 따른 셀 너비 조정
+            original_len = len(original_text.strip())
+            new_len = len(text.strip())
+    
+            MAX_TABLE_WIDTH = 41950
+            new_template = template
+            if new_len > original_len * 1.2:  # 새 텍스트가 20% 이상 길면 셀 너비 조정
+                # 1. 먼저 CHAR 태그의 위치 확인
+                char_pos = template.find(longest_match.group(0))
+    
+                # 2. CHAR 태그 이전의 가장 가까운 CELL 태그 찾기
+                cell_start_pattern = re.compile(r'<CELL\s+[^>]*?Width="(\d+)"')
+                cell_matches = list(cell_start_pattern.finditer(template[:char_pos]))
+    
+                if cell_matches:
+                    nearest_cell = cell_matches[-1]  # 가장 마지막(가장 가까운) CELL
+                    cell_width = int(nearest_cell.group(1))
+    
+                    # 새 너비 계산 - 여기서 multiplier 최댓값을 5.0으로 변경
+                    ratio = new_len / max(original_len, 1)
+                    multiplier = min(max(ratio, 1.2), 5.0)  # 2.5에서 5.0으로 변경
+                    new_cell_width = int(cell_width * multiplier)
+                    width_diff = new_cell_width - cell_width
+    
+                    # 셀 너비가 최대 테이블 너비를 넘지 않도록 제한
+                    if new_cell_width > MAX_TABLE_WIDTH:
+                        new_cell_width = MAX_TABLE_WIDTH
+                        width_diff = new_cell_width - cell_width
+    
+                    # 셀 너비 변경 (너비 속성만 교체)
+                    new_template = template[:nearest_cell.start(1)] + str(new_cell_width) + template[nearest_cell.end(1):]
+    
+                    # 테이블 전체 너비도 조정 (SHAPEOBJECT 내 SIZE 태그 찾기)
+                    size_pattern = re.compile(r'<SIZE\s+[^>]*?Width="(\d+)"[^>]*?>')
+                    table_section = template[:nearest_cell.start()]
+                    size_matches = list(size_pattern.finditer(table_section))
+                    if size_matches:
+                        last_size = size_matches[-1]  # 가장 가까운 SIZE 태그
+                        table_width = int(last_size.group(1))
+                        new_table_width = table_width + width_diff
+    
+                        # 테이블 너비가 최대 테이블 너비를 넘지 않도록 제한
+                        if new_table_width > MAX_TABLE_WIDTH:
+                            new_table_width = MAX_TABLE_WIDTH
+                            width_diff = new_table_width - table_width  # width_diff 업데이트
+    
+                        # 테이블 너비 변경
+                        new_template = new_template[:last_size.start(1)] + str(new_table_width) + new_template[last_size.end(1):]
+    
+                        # 템플릿이 변경되었으므로 CHAR 태그 위치 업데이트
+                        char_pos_new = new_template.find(longest_match.group(0))
+                        if char_pos_new != -1:
+                            start = char_pos_new
+                            end = start + len(longest_match.group(0))
+    
+            # 내용 삽입
+            new_template = new_template[:start] + replacement + new_template[end:]
             return new_template
+    
         else:
-            # <CHAR> 태그가 없으면 TEXT 태그 내의 CHAR 태그를 대상으로 처리
+            # CHAR 태그를 찾지 못한 경우: TEXT 태그 내의 CHAR 태그를 대상으로 처리
             text_pattern = re.compile(r'<TEXT CharShape="(\d+)">(.*?)</TEXT>')
             match = text_pattern.search(template)
             if match:
                 char_shape = match.group(1)
                 original_content = match.group(2)
-                
-                # CHAR 태그 내용 추출
+                # TEXT 태그 내에 포함된 CHAR 태그 내용 추출
                 char_content_match = re.search(r'<CHAR>(.*?)</CHAR>', original_content)
                 if char_content_match and preserve_prefix:
                     original_text = char_content_match.group(1)
                     prefix_match = re.match(r'^(\s*[^\w\s]+\s+)', original_text)
-                    
                     if prefix_match:
                         prefix = prefix_match.group(1)
                         replacement = f'<TEXT CharShape="{char_shape}"><CHAR>{prefix}{text}</CHAR></TEXT>'
                         return template.replace(match.group(0), replacement, 1)
-                
                 replacement = f'<TEXT CharShape="{char_shape}"><CHAR>{text}</CHAR></TEXT>'
                 return template.replace(match.group(0), replacement, 1)
-        
+    
         return template
 
-    
+
     def _convert_list_to_hwpml(self, list_element, template_style):
         """리스트를 HWPML로 변환"""
         hwpml = ""
@@ -879,18 +933,6 @@ class MainWindow(QMainWindow):
         self.central_widget = QWidget()
         self.setCentralWidget(self.central_widget)
         
-        # 현재 스크립트의 위치를 기준으로 상대 경로 설정
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        project_root = os.path.dirname(os.path.dirname(current_dir))  # 프로젝트 루트 디렉토리
-        
-        # 기본 출력 경로를 파일명까지 포함하여 설정
-        output_dir = os.path.join(project_root, "demo", "convertedDocs")
-        if not os.path.exists(output_dir):
-            os.makedirs(output_dir)
-        
-        # 기본 출력 파일 경로 설정 (파일명 포함)
-        self.output_path = os.path.join(output_dir, "converted.hml")
-        
         self.layout = QVBoxLayout(self.central_widget)
         
         self.text_edit = QTextEdit()
@@ -919,6 +961,8 @@ class MainWindow(QMainWindow):
         self.clipboard_button.clicked.connect(self.load_from_clipboard)
         self.save_button.clicked.connect(self.select_output_path)
         self.convert_button.clicked.connect(self.convert)
+        
+        self.output_path = ""
     
     def select_template(self):
         file_path, _ = QFileDialog.getOpenFileName(self, "템플릿 파일 선택", "", "HWP 파일 (*.hml)")
