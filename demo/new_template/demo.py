@@ -731,16 +731,16 @@ class HWPMLConverter:
     def _process_list_item(self, item, template, char_shape, top_level_counter, is_top_level=False, counter=None):
         if counter is None:
             counter = {}
-        
+
         hwpml = ""
-        
         fragments = item['fragments']
         level = item.get('level', 0)
         is_ordered = item.get('is_ordered', False)
-        
+
         p_tag_match = re.search(r'<P\s+([^>]+)>', template)
         p_attributes = p_tag_match.group(1) if p_tag_match else 'Style="0"'
-        
+
+        # 글머리 기호 설정
         if is_ordered:
             if is_top_level:
                 prefix = f"{top_level_counter}. "
@@ -751,32 +751,37 @@ class HWPMLConverter:
                 counter[level] += 1
         else:
             prefix = f"{self.bullet_symbol} "
-        
+
         indent = "  " * level
         hwpml += f'<P {p_attributes}>'
+
+        # 글머리 기호에는 템플릿의 char_shape 사용 (리스트 스타일)
         hwpml += f'<TEXT CharShape="{char_shape}"><CHAR>{indent}{prefix}</CHAR></TEXT>'
-        
+
+        # 텍스트 내용에는 일반 단락 스타일 사용
+        p_style = self.template_styles.get('p', {})
+        text_char_shape = p_style.get('char_shape', "0")  # 일반 단락 스타일 또는 기본값 "0"
+
         for fragment in fragments:
             fragment_type = fragment['type']
             content = fragment['content']
-            
+
             if fragment_type == 'text':
-                hwpml += f'<TEXT CharShape="{char_shape}"><CHAR>{content}</CHAR></TEXT>'
+                hwpml += f'<TEXT CharShape="{text_char_shape}"><CHAR>{content}</CHAR></TEXT>'
             elif fragment_type == 'strong':
-                # 굵게: 복제된 CharShape 사용
                 hwpml += f'<TEXT CharShape="{self.special_formats["strong"]}"><CHAR>{content}</CHAR></TEXT>'
             elif fragment_type == 'em':
-                # 기울임: 복제된 CharShape 사용
                 hwpml += f'<TEXT CharShape="{self.special_formats["em"]}"><CHAR>{content}</CHAR></TEXT>'
             elif fragment_type == 'a':
+                # 하이퍼링크 처리 코드...
                 field_id = str(self.field_id_counter + 1)
                 inst_id = str(self.inst_id_counter + 1)
                 self.field_id_counter += 1
                 self.inst_id_counter += 1
-                
+
                 href = fragment.get('href', '').replace('/', '\\/')
                 command = f"{href};1;0;0;"
-                
+
                 hwpml += f'<TEXT CharShape="{self.special_formats["underline"]}">'
                 hwpml += f'<FIELDBEGIN Command="{command}" Dirty="true" Editable="false" FieldId="{field_id}" InstId="{inst_id}" Property="0" Type="Hyperlink"/>'
                 hwpml += '</TEXT>'
@@ -784,15 +789,18 @@ class HWPMLConverter:
                 hwpml += f'<TEXT CharShape="{self.special_formats["underline"]}">'
                 hwpml += f'<FIELDEND Editable="false" FieldId="{field_id}" Property="0" Type="Hyperlink"/>'
                 hwpml += '</TEXT>'
-        
+
         hwpml += '</P>'
-        
+
+        # 중첩 리스트 처리 - 기존 코드와 동일
         if 'nested_items' in item and item['nested_items']:
             nested_counter = {}
             for nested_item in item['nested_items']:
                 hwpml += self._process_list_item(nested_item, template, char_shape, top_level_counter, is_top_level=False, counter=nested_counter)
-        
+
         return hwpml
+
+
     
     def _create_default_table_hwpml(self, table_element):
         """기본 HWPML 표 생성"""
