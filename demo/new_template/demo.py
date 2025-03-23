@@ -879,6 +879,18 @@ class MainWindow(QMainWindow):
         self.central_widget = QWidget()
         self.setCentralWidget(self.central_widget)
         
+        # 현재 스크립트의 위치를 기준으로 상대 경로 설정
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        project_root = os.path.dirname(os.path.dirname(current_dir))  # 프로젝트 루트 디렉토리
+        
+        # 기본 출력 경로를 파일명까지 포함하여 설정
+        output_dir = os.path.join(project_root, "demo", "convertedDocs")
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir)
+        
+        # 기본 출력 파일 경로 설정 (파일명 포함)
+        self.output_path = os.path.join(output_dir, "converted.hml")
+        
         self.layout = QVBoxLayout(self.central_widget)
         
         self.text_edit = QTextEdit()
@@ -907,8 +919,6 @@ class MainWindow(QMainWindow):
         self.clipboard_button.clicked.connect(self.load_from_clipboard)
         self.save_button.clicked.connect(self.select_output_path)
         self.convert_button.clicked.connect(self.convert)
-        
-        self.output_path = ""
     
     def select_template(self):
         file_path, _ = QFileDialog.getOpenFileName(self, "템플릿 파일 선택", "", "HWP 파일 (*.hml)")
