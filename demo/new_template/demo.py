@@ -609,10 +609,7 @@ class HWPMLConverter:
             elif element_type == 'ul':
                 hwpml += self._convert_list_to_hwpml(element, template_style)
             elif element_type == 'table':
-                if template_style['has_table']:
-                    hwpml += self._convert_table_to_hwpml(element, template_style)
-                else:
-                    hwpml += self._create_default_table_hwpml(element)
+                hwpml += self._create_default_table_hwpml(element)
         
         return hwpml
     
@@ -660,8 +657,11 @@ class HWPMLConverter:
         
         return hwpml
     
-    def _insert_text_into_template(self, template, text):
-        """텍스트를 템플릿의 CHAR 태그 내에 삽입. 모든 CHAR 태그 중 내용 길이가 가장 긴 태그를 찾아 대체함."""
+    def _insert_text_into_template(self, template, text, preserve_prefix=True):
+        """
+        텍스트를 템플릿의 CHAR 태그 내에 삽입. 
+        특수문자 접두어를 보존하는 옵션 추가
+        """
         # 모든 <CHAR>...</CHAR> 태그 찾기
         char_pattern = re.compile(r'<CHAR>(.*?)</CHAR>')
         matches = list(char_pattern.finditer(template))
@@ -670,7 +670,20 @@ class HWPMLConverter:
             # 각 매치의 그룹1(내용)의 길이를 비교하여 가장 긴 매치 선택
             longest_match = max(matches, key=lambda m: len(m.group(1)))
             start, end = longest_match.span()
-            replacement = f'<CHAR>{text}</CHAR>'
+            original_text = longest_match.group(1)
+            
+            if preserve_prefix:
+                # 특수문자 접두어 추출 (첫 번째 공백 전까지의 문자)
+                prefix_match = re.match(r'^(\s*[^\w\s]+\s+)', original_text)
+                
+                if prefix_match:
+                    prefix = prefix_match.group(1)
+                    replacement = f'<CHAR>{prefix}{text}</CHAR>'
+                else:
+                    replacement = f'<CHAR>{text}</CHAR>'
+            else:
+                replacement = f'<CHAR>{text}</CHAR>'
+                
             # 템플릿에서 해당 부분만 대체
             new_template = template[:start] + replacement + template[end:]
             return new_template
@@ -680,8 +693,22 @@ class HWPMLConverter:
             match = text_pattern.search(template)
             if match:
                 char_shape = match.group(1)
+                original_content = match.group(2)
+                
+                # CHAR 태그 내용 추출
+                char_content_match = re.search(r'<CHAR>(.*?)</CHAR>', original_content)
+                if char_content_match and preserve_prefix:
+                    original_text = char_content_match.group(1)
+                    prefix_match = re.match(r'^(\s*[^\w\s]+\s+)', original_text)
+                    
+                    if prefix_match:
+                        prefix = prefix_match.group(1)
+                        replacement = f'<TEXT CharShape="{char_shape}"><CHAR>{prefix}{text}</CHAR></TEXT>'
+                        return template.replace(match.group(0), replacement, 1)
+                
                 replacement = f'<TEXT CharShape="{char_shape}"><CHAR>{text}</CHAR></TEXT>'
                 return template.replace(match.group(0), replacement, 1)
+        
         return template
 
     
@@ -766,61 +793,6 @@ class HWPMLConverter:
                 hwpml += self._process_list_item(nested_item, template, char_shape, top_level_counter, is_top_level=False, counter=nested_counter)
         
         return hwpml
-    
-    def _convert_table_to_hwpml(self, table_element, template_style):
-        """표를 HWPML로 변환"""
-        table_pattern = re.compile(r'<TABLE.*?</TABLE>', re.DOTALL)
-        match = table_pattern.search(template_style['structure'])
-        
-        if not match:
-            return self._create_default_table_hwpml(table_element)
-        
-        table_template = match.group(0)
-        rows = table_element['rows']
-        
-        row_count = len(rows)
-        col_count = max(len(row) for row in rows) if rows else 0
-        
-        table_template = re.sub(r'ColCount="\d+"', f'ColCount="{col_count}"', table_template)
-        table_template = re.sub(r'RowCount="\d+"', f'RowCount="{row_count}"', table_template)
-        
-        row_pattern = re.compile(r'<ROW>.*?</ROW>', re.DOTALL)
-        row_match = row_pattern.search(table_template)
-        
-        if row_match:
-            row_template = row_match.group(0)
-            new_rows = ""
-            for row_idx, row in enumerate(rows):
-                new_row = row_template
-                cell_pattern = re.compile(r'<CELL.*?</CELL>', re.DOTALL)
-                cell_matches = list(cell_pattern.finditer(new_row))
-                
-                for cell_idx, cell in enumerate(row):
-                    if cell_idx < len(cell_matches):
-                        cell_template = cell_matches[cell_idx].group(0)
-                        new_cell = re.sub(
-                            r'<CHAR>.*?</CHAR>',
-                            f'<CHAR>{cell["content"]}</CHAR>',
-                            cell_template,
-                            flags=re.DOTALL
-                        )
-                        new_row = new_row.replace(cell_template, new_cell, 1)
-                
-                new_row = re.sub(r'RowAddr="\d+"', f'RowAddr="{row_idx}"', new_row)
-                new_rows += new_row
-            
-            table_template = row_pattern.sub(new_rows, table_template)
-            
-            full_structure = re.sub(
-                r'<TABLE.*?</TABLE>',
-                table_template,
-                template_style['structure'],
-                flags=re.DOTALL
-            )
-            
-            return full_structure
-        
-        return self._create_default_table_hwpml(table_element)
     
     def _create_default_table_hwpml(self, table_element):
         """기본 HWPML 표 생성"""
