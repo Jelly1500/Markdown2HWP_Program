@@ -1,145 +1,316 @@
 import sys
 import re
 import io
-import markdown
+import mistune
 import os
 import xml.etree.ElementTree as ET
 from bs4 import BeautifulSoup, NavigableString
-from PySide6.QtWidgets import (QApplication, QMainWindow, QTextEdit, QPushButton,
-                             QFileDialog, QVBoxLayout, QHBoxLayout, QWidget, QStatusBar)
+from PySide6.QtWidgets import (QApplication, QMainWindow, QTextEdit, QPushButton, QFileDialog, QVBoxLayout, QHBoxLayout, QWidget, QStatusBar)
 from PySide6.QtGui import QIcon
 
 class HWPMLConverter:
     def __init__(self):
-        # Initialize counters for unique IDs
+        # 초기화 필드
         self.field_id_counter = 0
         self.inst_id_counter = 1000000
         
-        # Define expected order of markdown elements in template
+        # 특별 서식 ID를 저장할 딕셔너리
+        self.special_formats = {}
+        
+        # 순서대로 매핑할 마크다운 요소 목록 (strong, em, a 제거)
         self.style_mapping_order = [
-            'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 
-            'p', 'ul', 'ol', 'a', 'strong', 'em'
+            'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'ul'
         ]
         
-        # Initialize template styles mapping
+        # 템플릿 스타일 정보를 저장할 딕셔너리
         self.template_styles = {key: None for key in self.style_mapping_order}
         
+        # 순서 없는 리스트에 사용할 글머리표 특수기호
+        self.bullet_symbol = "•"  # 기본 글머리표
+
     def load_template(self, template_path):
-        """Load the HWPML template file and extract styles"""
+        """HWPML 템플릿 파일을 로드하고 서식 구조 추출"""
         try:
             with open(template_path, 'r', encoding='utf-8') as file:
                 self.template_content = file.read()
-                
-            # Parse the template to extract style information
+            
+            # 템플릿에서 서식 구조 추출
             self._extract_template_styles()
+            
+            # CharShape 추출 및 특별 서식 복제
+            self.special_formats = self._extract_and_clone_charshapes()
             
             return True
         except Exception as e:
-            print(f"Error loading template: {e}")
+            print(f"템플릿 로드 오류: {e}")
             return False
     
-    def _extract_template_styles(self):
-        """Extract style information from the template in sequential order"""
-        soup = BeautifulSoup(self.template_content, 'xml')
+    def _clone_and_add_formatting(self, base_charshape, new_id, formatting_tags):
+        """기본 CharShape을 복제하고 서식 태그를 추가하여 새 CharShape 생성"""
+        soup = BeautifulSoup(features='xml')
         
-        # Find all paragraphs in the BODY section
+        # 새 CharShape 태그 생성
+        new_charshape = soup.new_tag("CHARSHAPE")
+        
+        # 기존 CharShape의 모든 속성 복사
+        for attr, value in base_charshape.attrs.items():
+            new_charshape[attr] = value
+        
+        # 새로운 ID 할당
+        new_charshape['Id'] = new_id
+        
+        # 서식 태그 추가
+        for tag in formatting_tags:
+            if isinstance(tag, dict):
+                # 속성이 있는 태그 추가
+                new_tag = soup.new_tag(tag.pop('tag'))
+                for attr, value in tag.items():
+                    new_tag[attr] = value
+                new_charshape.append(new_tag)
+            else:
+                # 일반 서식 태그 추가
+                new_tag = soup.new_tag(tag)
+                new_charshape.append(new_tag)
+
+        # 기존 CharShape의 자식 요소 복사
+        for child in base_charshape.children:
+            if isinstance(child, NavigableString):
+                new_charshape.append(child.copy())
+            else:
+                new_child = soup.new_tag(child.name)
+                for attr, value in child.attrs.items():
+                    new_child[attr] = value
+                new_charshape.append(new_child)
+        
+        return new_charshape
+
+    def _extract_and_clone_charshapes(self):
+        """템플릿에서 CharShape을 추출하고 특별 서식이 적용된 복제본 생성"""
+        soup = BeautifulSoup(self.template_content, 'xml')
+
+        # HWPML 문서의 CHARSHAPE 찾기 - 경로 수정
+        docinfo = soup.find('MAPPINGTABLE')
+        if not docinfo:
+            raise ValueError("템플릿에 DOCINFO 섹션이 없습니다")
+
+        charshapepool = docinfo.find('CHARSHAPELIST')
+        if not charshapepool:
+            raise ValueError("템플릿에 CHARSHAPEPOOL 섹션이 없습니다")
+
+        # 모든 CharShape 요소 가져오기
+        charshapes = charshapepool.find_all('CHARSHAPE')
+        if not charshapes:
+            raise ValueError("템플릿에 CHARSHAPE 정의가 없습니다")
+
+        # 일반 단락과 리스트의 CharShape ID 찾기
+        base_charshape_id = self.template_styles.get('p', {}).get('char_shape') or self.template_styles.get('ul', {}).get('char_shape')
+        base_charshape = next((cs for cs in charshapes if cs.get('Id') == base_charshape_id), None)
+
+        if base_charshape is None:
+            print(f"경고: ID {base_charshape_id}에 해당하는 CHARSHAPE을 찾을 수 없습니다. 첫 번째 CHARSHAPE을 사용합니다.")
+            base_charshape = charshapes[0]
+
+        # 새로운 CharShape ID 생성
+        last_id = max(int(cs.get('Id', '0')) for cs in charshapes)
+
+        # 특별 서식 정의를 위한 새로운 CharShape 복제
+        special_formats = {
+            'strong': str(last_id + 1),      # 굵게
+            'em': str(last_id + 2),          # 기울임
+            'underline': str(last_id + 3),   # 밑줄
+            'strong_em': str(last_id + 4),   # 굵게+기울임
+            'strong_underline': str(last_id + 5),  # 굵게+밑줄
+            'em_underline': str(last_id + 6),      # 기울임+밑줄
+            'strong_em_underline': str(last_id + 7)  # 굵게+기울임+밑줄
+        }
+
+        # 굵게 스타일 CharShape 복제
+        strong_charshape = self._clone_charshape(base_charshape, special_formats['strong'])
+        bold_tag = soup.new_tag("BOLD")
+        strong_charshape.append(bold_tag)
+        charshapepool.append(strong_charshape)
+
+        # 기울임 스타일 CharShape 복제
+        em_charshape = self._clone_charshape(base_charshape, special_formats['em'])
+        italic_tag = soup.new_tag("ITALIC")
+        em_charshape.append(italic_tag)
+        charshapepool.append(em_charshape)
+
+        # 밑줄 스타일 CharShape 복제
+        underline_charshape = self._clone_charshape(base_charshape, special_formats['underline'])
+        underline_tag = soup.new_tag("UNDERLINE", Color="16711680", Shape="Solid", Type="Bottom")
+        underline_charshape.append(underline_tag)
+        charshapepool.append(underline_charshape)
+
+        # 굵게+기울임 스타일 CharShape 복제
+        strong_em_charshape = self._clone_charshape(base_charshape, special_formats['strong_em'])
+        strong_em_charshape.append(soup.new_tag("BOLD"))
+        strong_em_charshape.append(soup.new_tag("ITALIC"))
+        charshapepool.append(strong_em_charshape)
+
+        # 굵게+밑줄 스타일 CharShape 복제
+        strong_underline_charshape = self._clone_charshape(base_charshape, special_formats['strong_underline'])
+        strong_underline_charshape.append(soup.new_tag("BOLD"))
+        strong_underline_charshape.append(soup.new_tag("UNDERLINE", Color="16711680", Shape="Solid", Type="Bottom"))
+        charshapepool.append(strong_underline_charshape)
+
+        # 기울임+밑줄 스타일 CharShape 복제
+        em_underline_charshape = self._clone_charshape(base_charshape, special_formats['em_underline'])
+        em_underline_charshape.append(soup.new_tag("ITALIC"))
+        em_underline_charshape.append(soup.new_tag("UNDERLINE", Color="16711680", Shape="Solid", Type="Bottom"))
+        charshapepool.append(em_underline_charshape)
+
+        # 굵게+기울임+밑줄 스타일 CharShape 복제
+        all_formats_charshape = self._clone_charshape(base_charshape, special_formats['strong_em_underline'])
+        all_formats_charshape.append(soup.new_tag("BOLD"))
+        all_formats_charshape.append(soup.new_tag("ITALIC"))
+        all_formats_charshape.append(soup.new_tag("UNDERLINE", Color="16711680", Shape="Solid", Type="Bottom"))
+        charshapepool.append(all_formats_charshape)
+
+        # 템플릿 내용 업데이트
+        self.template_content = str(soup)
+
+        return special_formats
+
+    def _clone_charshape(self, base_charshape, new_id):
+        """CharShape 요소를 복제하고 새 ID 할당"""
+        soup = BeautifulSoup(features='xml')
+        
+        # 새 CharShape 태그 생성
+        new_charshape = soup.new_tag("CHARSHAPE")
+        
+        # 모든 속성 복사
+        for attr, value in base_charshape.attrs.items():
+            new_charshape[attr] = value
+        
+        # ID 업데이트
+        new_charshape['Id'] = new_id
+        
+        # 모든 하위 요소 복사 (BOLD, ITALIC, UNDERLINE 등 제외)
+        for child in base_charshape.children:
+            if isinstance(child, NavigableString):
+                new_charshape.append(child.copy())
+            else:
+                # 기존 서식 태그는 복사하지 않음 (새로 추가할 예정)
+                if child.name not in ['BOLD', 'ITALIC', 'UNDERLINE']:
+                    new_child = soup.new_tag(child.name)
+                    for attr, value in child.attrs.items():
+                        new_child[attr] = value
+                    for grandchild in child.children:
+                        if isinstance(grandchild, NavigableString):
+                            new_child.append(grandchild.copy())
+                        else:
+                            new_grandchild = soup.new_tag(grandchild.name)
+                            for attr, value in grandchild.attrs.items():
+                                new_grandchild[attr] = value
+                            new_child.append(new_grandchild)
+                    new_charshape.append(new_child)
+        
+        return new_charshape
+
+    
+    def _extract_template_styles(self):
+        """템플릿에서 순서대로 서식 스타일 추출"""
+        soup = BeautifulSoup(self.template_content, 'xml')
         body_section = soup.find('BODY')
         if not body_section:
-            raise ValueError("Template doesn't contain a BODY section")
+            raise ValueError("템플릿에 BODY 섹션이 없습니다")
         
         section = body_section.find('SECTION')
         if not section:
-            raise ValueError("Template doesn't contain a SECTION element")
+            raise ValueError("템플릿에 SECTION 요소가 없습니다")
         
-        paragraphs = section.find_all('P')
+        # 모든 균형 잡힌 P 태그 구조 순서대로 추출
+        balanced_p_tags = self._extract_balanced_p_tags(str(section))
         
-        # Map paragraphs to styles in sequence
-        current_index = 0
-        for p in paragraphs:
-            # Skip empty paragraphs or those without content
-            text_elem = p.find('TEXT')
-            if not text_elem:
-                continue
+        # 순서대로 마크다운 요소에 매핑
+        for idx, tag_structure in enumerate(balanced_p_tags):
+            if idx < len(self.style_mapping_order):
+                style_key = self.style_mapping_order[idx]
+                self.template_styles[style_key] = {
+                    'structure': tag_structure,
+                    'para_shape': self._extract_para_shape(tag_structure),
+                    'char_shape': self._extract_char_shape(tag_structure),
+                    'has_table': '<TABLE' in tag_structure,
+                    'has_field': '<FIELDBEGIN' in tag_structure
+                }
                 
-            char_elem = text_elem.find('CHAR')
-            if not char_elem:
-                # Check if this is a link paragraph (has FIELDBEGIN)
-                if p.find('FIELDBEGIN') and current_index < len(self.style_mapping_order):
-                    # Find the 'a' element in our mapping order
-                    link_index = self.style_mapping_order.index('a') if 'a' in self.style_mapping_order else -1
-                    if link_index >= 0:
-                        current_index = link_index  # Jump to the link position
-                        self.template_styles['a'] = self._extract_style_info(p, text_elem)
-                        current_index += 1
-                continue
-            
-            # Skip paragraphs with empty text
-            content = char_elem.text.strip()
-            if not content:
-                continue
-            
-            # Special handling for link elements
-            if p.find('FIELDBEGIN') and current_index < len(self.style_mapping_order):
-                # Find the 'a' element in our mapping order
-                link_index = self.style_mapping_order.index('a') if 'a' in self.style_mapping_order else -1
-                if link_index >= 0:
-                    current_index = link_index  # Jump to the link position
-                    self.template_styles['a'] = self._extract_style_info(p, text_elem)
-                    current_index += 1
-                continue
-            
-            # Map the current paragraph to the next expected style
-            if current_index < len(self.style_mapping_order):
-                style_key = self.style_mapping_order[current_index]
-                self.template_styles[style_key] = self._extract_style_info(p, text_elem)
-                current_index += 1
-        
-        # Debug output
-        print("Extracted Style Information:")
-        for key, value in self.template_styles.items():
-            print(f"  {key}: {value}")
+                # 순서 없는 리스트에서 글머리표 추출
+                if style_key == 'ul':
+                    bullet = self._extract_bullet_symbol(tag_structure)
+                    if bullet:
+                        self.bullet_symbol = bullet
     
-    def _extract_style_info(self, p_elem, text_elem):
-        """Extract style information from a paragraph and text element"""
-        para_shape = p_elem.get('ParaShape', '0')
-        char_shape = text_elem.get('CharShape', '0')
+    def _extract_bullet_symbol(self, structure):
+        """순서 없는 리스트 구조에서 글머리표 특수기호 추출"""
+        char_pattern = re.compile(r'<CHAR>(.*?)</CHAR>')
+        match = char_pattern.search(structure)
         
-        # For link elements, we need additional information
-        if p_elem.find('FIELDBEGIN'):
-            field_begin = p_elem.find('FIELDBEGIN')
-            field_id = field_begin.get('FieldId', '0')
-            inst_id = field_begin.get('InstId', '0')
-            link_text = p_elem.find('TEXT', {'CharShape': '10'})
-            
-            return {
-                'para_shape': para_shape,
-                'char_shape': char_shape,
-                'is_link': True,
-                'field_id': field_id,
-                'inst_id': inst_id,
-                'link_text_shape': link_text.get('CharShape', '10') if link_text else '10'
-            }
-        
-        return {
-            'para_shape': para_shape,
-            'char_shape': char_shape
-        }
+        if match:
+            content = match.group(1).strip()
+            if content and not content[0].isalnum():
+                bullet_parts = re.match(r'([^\w\s]+)(\s*)(.*)', content)
+                if bullet_parts:
+                    return bullet_parts.group(1)
+        return None
     
-    def convert_md_to_hwpml(self, md_text, title="No Title", author="No Author", date="No Date"):
-        """Convert markdown text to HWPML using the loaded template"""
+    def _extract_balanced_p_tags(self, content):
+        """균형 잡힌 P 태그 쌍을 순서대로 추출"""
+        elements = []
+        start_idx = 0
+        
+        while True:
+            p_start = content.find('<P ', start_idx)
+            if p_start == -1:
+                break
+            
+            open_tags = 1
+            close_tags = 0
+            search_idx = p_start + 2
+            
+            while open_tags > close_tags and search_idx < len(content):
+                next_open = content.find('<P ', search_idx)
+                next_close = content.find('</P>', search_idx)
+                
+                if next_close == -1:
+                    break
+                
+                if next_open != -1 and next_open < next_close:
+                    open_tags += 1
+                    search_idx = next_open + 2
+                else:
+                    close_tags += 1
+                    search_idx = next_close + 4
+            
+            if open_tags == close_tags:
+                element = content[p_start:search_idx]
+                elements.append(element)
+                start_idx = search_idx
+            else:
+                start_idx = p_start + 2
+        
+        return elements
+    
+    def _extract_para_shape(self, structure):
+        """구조에서 단락 모양 ID 추출"""
+        match = re.search(r'<P ParaShape="(\d+)"', structure)
+        return match.group(1) if match else "0"
+    
+    def _extract_char_shape(self, structure):
+        """구조에서 글자 모양 ID 추출"""
+        match = re.search(r'<TEXT CharShape="(\d+)"', structure)
+        return match.group(1) if match else "0"
+    
+    def convert_md_to_hwpml(self, md_text, title="제목 없음", author="작성자 없음", date="날짜 없음"):
+        """마크다운 텍스트를 HWPML로 변환"""
         if not hasattr(self, 'template_content'):
-            raise ValueError("Template has not been loaded. Call load_template() first.")
+            raise ValueError("템플릿이 로드되지 않았습니다. 먼저 load_template() 호출 필요")
         
-        # Convert markdown to HTML
-        html = markdown.markdown(md_text, extensions=['fenced_code', 'tables'], tab_length=2)
-        
-        # Parse the HTML
+        html = mistune.html(md_text)
         soup = BeautifulSoup(html, 'html.parser')
+        md_elements = self._extract_markdown_elements(soup)
+        hwpml_body = self._convert_elements_to_hwpml(md_elements)
         
-        # Generate HWPML content
-        hwpml_body = self._convert_html_to_hwpml(soup)
-        
-        # Replace the template body with our converted content
         result = re.sub(
             r'<BODY>.*?<SECTION Id="0">(.*?)</SECTION>.*?</BODY>',
             f'<BODY><SECTION Id="0">{hwpml_body}</SECTION></BODY>',
@@ -147,221 +318,495 @@ class HWPMLConverter:
             flags=re.DOTALL
         )
         
-        # Replace title, author, and date
-        result = result.replace("<TITLE>No Title</TITLE>", f"<TITLE>{title}</TITLE>")
-        result = result.replace("<AUTHOR>No Author</AUTHOR>", f"<AUTHOR>{author}</AUTHOR>")
-        result = result.replace("<DATE>No Date</DATE>", f"<DATE>{date}</DATE>")
+        result = result.replace("<TITLE>제목 없음</TITLE>", f"<TITLE>{title}</TITLE>")
+        result = result.replace("<AUTHOR>작성자 없음</AUTHOR>", f"<AUTHOR>{author}</AUTHOR>")
+        result = result.replace("<DATE>날짜 없음</DATE>", f"<DATE>{date}</DATE>")
         
         return result
     
-    def _convert_html_to_hwpml(self, soup):
-        """Convert HTML to HWPML body content"""
-        hwpml_content = ""
+    def _extract_markdown_elements(self, soup):
+        """HTML에서 마크다운 요소 추출"""
+        elements = []
         
-        # Process each top-level element
-        for element in soup:
-            if isinstance(element, NavigableString):
-                continue
-            
-            hwpml_content += self._convert_element_to_hwpml(element)
+        for tag in soup.find_all(True, recursive=False):
+            if tag.name in ['h1', 'h2', 'h3', 'h4', 'h5', 'h6']:
+                elements.append({
+                    'type': tag.name,
+                    'content': tag.get_text()
+                })
+            elif tag.name == 'p':
+                if tag.find(['strong', 'b', 'em', 'i', 'a']):
+                    elements.append({
+                        'type': 'p',
+                        'content': tag.get_text(),
+                        'has_formatting': True,
+                        'fragments': self._extract_paragraph_fragments(tag)
+                    })
+                else:
+                    elements.append({
+                        'type': 'p',
+                        'content': tag.get_text(),
+                        'has_formatting': False
+                    })
+            elif tag.name in ['ul', 'ol']:
+                elements.append({
+                    'type': 'ul',
+                    'items': self._extract_list_items(tag),
+                    'is_ordered': tag.name == 'ol'
+                })
+            elif tag.name == 'table':
+                elements.append({
+                    'type': 'table',
+                    'rows': self._extract_table_rows(tag)
+                })
         
-        return hwpml_content
+        return elements
     
-    def _convert_element_to_hwpml(self, element):
-        """Convert an HTML element to its HWPML equivalent"""
-        tag_name = element.name
-        
-        if tag_name in ['h1', 'h2', 'h3', 'h4', 'h5', 'h6']:
-            return self._convert_header_to_hwpml(element)
-        elif tag_name == 'p':
-            return self._convert_paragraph_to_hwpml(element)
-        elif tag_name in ['ul', 'ol']:
-            return self._convert_list_to_hwpml(element)
-        elif tag_name == 'table':
-            return self._convert_table_to_hwpml(element)
-        else:
-            # Default handling for unknown elements
-            return ""
-    
-    def _convert_header_to_hwpml(self, header_elem):
-        """Convert an HTML header to HWPML"""
-        level = int(header_elem.name[1])  # Extract header level (1-6)
-        style_key = f'h{level}'
-        
-        if style_key not in self.template_styles or self.template_styles[style_key] is None:
-            # Fallback to default style if not found in template
-            para_shape = "0"
-            char_shape = str(level)  # Use level as char shape
-        else:
-            style = self.template_styles[style_key]
-            para_shape = style['para_shape']
-            char_shape = style['char_shape']
-        
-        text = header_elem.get_text()
-        
-        return f'<P ParaShape="{para_shape}" Style="0"><TEXT CharShape="{char_shape}"><CHAR>{text}</CHAR></TEXT></P>\n'
-    
-    def _convert_paragraph_to_hwpml(self, p_elem):
-        """Convert an HTML paragraph to HWPML"""
-        if 'p' not in self.template_styles or self.template_styles['p'] is None:
-            para_shape = "0"
-            char_shape = "1"
-        else:
-            style = self.template_styles['p']
-            para_shape = style['para_shape']
-            char_shape = style['char_shape']
-        
-        # Process paragraph content with potential formatting
-        content = ""
-        
-        for child in p_elem.children:
+    def _extract_paragraph_fragments(self, p_tag):
+        """단락 내 텍스트와 강조 요소를 조각으로 추출하면서 공백 보존"""
+        fragments = []
+
+        for child in p_tag.children:
             if isinstance(child, NavigableString):
-                text = str(child)
-                if text.strip():
-                    content += f'<TEXT CharShape="{char_shape}"><CHAR>{text}</CHAR></TEXT>'
-            elif child.name == 'a':
-                content += self._convert_link_to_hwpml(child)
+                text = str(child)  # 공백을 포함한 원본 텍스트 유지
+                if text:  # 빈 문자열이 아니면 추가
+                    fragments.append({'type': 'text', 'content': text})
             elif child.name in ['strong', 'b']:
-                content += self._convert_bold_to_hwpml(child)
+                # 앞뒤 공백 확인 및 보존
+                prev_space = ''
+                next_space = ''
+
+                # 앞쪽 공백 확인
+                if child.previous_sibling and isinstance(child.previous_sibling, NavigableString):
+                    prev_text = str(child.previous_sibling)
+                    if prev_text and prev_text[-1].isspace():
+                        # 이미 앞 텍스트에 공백이 있으므로 여기서는 추가하지 않음
+                        prev_space = ''
+
+                # 뒤쪽 공백 확인
+                if child.next_sibling and isinstance(child.next_sibling, NavigableString):
+                    next_text = str(child.next_sibling)
+                    if next_text and next_text[0].isspace():
+                        # 이미 뒤 텍스트에 공백이 있으므로 여기서는 추가하지 않음
+                        next_space = ''
+
+                fragments.append({'type': 'strong', 'content': prev_space + child.get_text() + next_space})
             elif child.name in ['em', 'i']:
-                content += self._convert_italic_to_hwpml(child)
-        
-        if not content:
-            content = f'<TEXT CharShape="{char_shape}"><CHAR/></TEXT>'
-        
-        return f'<P ParaShape="{para_shape}" Style="0">{content}</P>\n'
+                # 기울임체도 동일하게 처리
+                prev_space = ''
+                next_space = ''
+
+                if child.previous_sibling and isinstance(child.previous_sibling, NavigableString):
+                    prev_text = str(child.previous_sibling)
+                    if prev_text and prev_text[-1].isspace():
+                        prev_space = ''
+
+                if child.next_sibling and isinstance(child.next_sibling, NavigableString):
+                    next_text = str(child.next_sibling)
+                    if next_text and next_text[0].isspace():
+                        next_space = ''
+
+                fragments.append({'type': 'em', 'content': prev_space + child.get_text() + next_space})
+            elif child.name == 'a':
+                # 링크도 동일하게 처리
+                prev_space = ''
+                next_space = ''
+
+                if child.previous_sibling and isinstance(child.previous_sibling, NavigableString):
+                    prev_text = str(child.previous_sibling)
+                    if prev_text and prev_text[-1].isspace():
+                        prev_space = ''
+
+                if child.next_sibling and isinstance(child.next_sibling, NavigableString):
+                    next_text = str(child.next_sibling)
+                    if next_text and next_text[0].isspace():
+                        next_space = ''
+
+                fragments.append({
+                    'type': 'a', 
+                    'content': prev_space + child.get_text() + next_space, 
+                    'href': child.get('href', '')
+                })
+
+        return fragments
+
     
-    def _convert_list_to_hwpml(self, list_elem, depth=0):
-        """Convert an HTML list (ul/ol) to HWPML"""
-        hwpml = ""
-        is_ordered = list_elem.name == 'ol'
+    def _extract_list_items(self, list_tag):
+        """리스트 항목 추출 (공백 보존)"""
+        items = []
+        is_ordered = list_tag.name == 'ol'
         
-        # Get style from template
-        style_key = 'ol' if is_ordered else 'ul'
-        if style_key not in self.template_styles or self.template_styles[style_key] is None:
-            para_shape = str(depth + 1)  # Default based on depth
-            char_shape = "1"
-        else:
-            style = self.template_styles[style_key]
-            para_shape = style['para_shape']
-            char_shape = style['char_shape']
+        for li in list_tag.find_all('li', recursive=False):
+            item_fragments = []
+            nested_lists = []
+            
+            for child in li.children:
+                if isinstance(child, NavigableString):
+                    text = str(child)  # 공백 보존
+                    if text:
+                        item_fragments.append({'type': 'text', 'content': text})
+                elif child.name in ['strong', 'b']:
+                    # 앞뒤 공백 보존
+                    prev_space = ''
+                    next_space = ''
+                    
+                    if child.previous_sibling and isinstance(child.previous_sibling, NavigableString):
+                        prev_text = str(child.previous_sibling)
+                        if prev_text and prev_text[-1].isspace():
+                            prev_space = ''
+                    
+                    if child.next_sibling and isinstance(child.next_sibling, NavigableString):
+                        next_text = str(child.next_sibling)
+                        if next_text and next_text[0].isspace():
+                            next_space = ''
+                    
+                    item_fragments.append({'type': 'strong', 'content': prev_space + child.get_text() + next_space})
+                elif child.name in ['em', 'i']:
+                    # 기울임체도 동일하게 처리
+                    prev_space = ''
+                    next_space = ''
+                    
+                    if child.previous_sibling and isinstance(child.previous_sibling, NavigableString):
+                        prev_text = str(child.previous_sibling)
+                        if prev_text and prev_text[-1].isspace():
+                            prev_space = ''
+                    
+                    if child.next_sibling and isinstance(child.next_sibling, NavigableString):
+                        next_text = str(child.next_sibling)
+                        if next_text and next_text[0].isspace():
+                            next_space = ''
+                    
+                    item_fragments.append({'type': 'em', 'content': prev_space + child.get_text() + next_space})
+                elif child.name == 'a':
+                    # 링크도 동일하게 처리
+                    prev_space = ''
+                    next_space = ''
+                    
+                    if child.previous_sibling and isinstance(child.previous_sibling, NavigableString):
+                        prev_text = str(child.previous_sibling)
+                        if prev_text and prev_text[-1].isspace():
+                            prev_space = ''
+                    
+                    if child.next_sibling and isinstance(child.next_sibling, NavigableString):
+                        next_text = str(child.next_sibling)
+                        if next_text and next_text[0].isspace():
+                            next_space = ''
+                    
+                    item_fragments.append({
+                        'type': 'a', 
+                        'content': prev_space + child.get_text() + next_space, 
+                        'href': child.get('href', '')
+                    })
+                elif child.name not in ['ul', 'ol']:
+                    text = child.get_text()  # 공백 보존
+                    if text:
+                        item_fragments.append({'type': 'text', 'content': text})
+                else:
+                    nested_lists.append(child)
+            
+            item_info = {
+                'fragments': item_fragments,
+                'is_ordered': is_ordered,
+                'level': 0
+            }
+            
+            if nested_lists:
+                item_info['nested_items'] = []
+                for nested_list in nested_lists:
+                    nested_items = self._extract_nested_list_items(nested_list, 1)
+                    item_info['nested_items'].extend(nested_items)
+            
+            items.append(item_info)
         
-        # Process list items
-        item_counter = 1
-        for li in list_elem.find_all('li', recursive=False):
-            # Create paragraph for the list item
-            content = ""
+        return items
+
+    
+    def _extract_nested_list_items(self, list_tag, level):
+        """중첩 리스트 항목 추출"""
+        items = []
+        is_ordered = list_tag.name == 'ol'
+        
+        for li in list_tag.find_all('li', recursive=False):
+            item_fragments = []
+            nested_lists = []
             
-            # Add bullet/number prefix
-            prefix = f"{item_counter}. " if is_ordered else "• "
-            content += f'<TEXT CharShape="{char_shape}"><CHAR>{prefix}</CHAR></TEXT>'
-            
-            # Process list item content
             for child in li.children:
                 if isinstance(child, NavigableString):
                     text = str(child).strip()
                     if text:
-                        content += f'<TEXT CharShape="{char_shape}"><CHAR>{text}</CHAR></TEXT>'
-                elif child.name in ['ul', 'ol']:
-                    # Skip nested lists, they'll be processed separately
-                    continue
-                elif child.name == 'a':
-                    content += self._convert_link_to_hwpml(child)
+                        item_fragments.append({'type': 'text', 'content': text})
                 elif child.name in ['strong', 'b']:
-                    content += self._convert_bold_to_hwpml(child)
+                    item_fragments.append({'type': 'strong', 'content': child.get_text()})
                 elif child.name in ['em', 'i']:
-                    content += self._convert_italic_to_hwpml(child)
+                    item_fragments.append({'type': 'em', 'content': child.get_text()})
+                elif child.name == 'a':
+                    item_fragments.append({'type': 'a', 'content': child.get_text(), 'href': child.get('href', '')})
+                elif child.name not in ['ul', 'ol']:
+                    text = child.get_text().strip()
+                    if text:
+                        item_fragments.append({'type': 'text', 'content': text})
+                else:
+                    nested_lists.append(child)
             
-            hwpml += f'<P ParaShape="{para_shape}" Style="0">{content}</P>\n'
+            item_info = {
+                'fragments': item_fragments,
+                'is_ordered': is_ordered,
+                'level': level
+            }
             
-            # Process nested lists
-            for nested_list in li.find_all(['ul', 'ol'], recursive=False):
-                hwpml += self._convert_list_to_hwpml(nested_list, depth + 1)
+            if nested_lists:
+                item_info['nested_items'] = []
+                for nested_list in nested_lists:
+                    nested_items = self._extract_nested_list_items(nested_list, level + 1)
+                    item_info['nested_items'].extend(nested_items)
             
-            if is_ordered:
-                item_counter += 1
+            items.append(item_info)
+        
+        return items
+    
+    def _extract_table_rows(self, table_tag):
+        """표 행과 셀 데이터 추출"""
+        rows = []
+        
+        thead = table_tag.find('thead')
+        if thead:
+            for tr in thead.find_all('tr'):
+                row = []
+                for th in tr.find_all(['th']):
+                    row.append({'content': th.get_text(), 'is_header': True})
+                if row:
+                    rows.append(row)
+        
+        tbody = table_tag.find('tbody') or table_tag
+        for tr in tbody.find_all('tr'):
+            row = []
+            for td in tr.find_all(['td']):
+                row.append({'content': td.get_text(), 'is_header': False})
+            if row:
+                rows.append(row)
+        
+        return rows
+    
+    def _convert_elements_to_hwpml(self, elements):
+        """마크다운 요소를 HWPML로 변환"""
+        hwpml = ""
+        
+        for element in elements:
+            element_type = element['type']
+            template_style = self.template_styles.get(element_type, self.template_styles.get('p'))
+            
+            if template_style is None:
+                hwpml += self._create_default_hwpml(element)
+                continue
+            
+            if element_type in ['h1', 'h2', 'h3', 'h4', 'h5', 'h6']:
+                hwpml += self._insert_text_into_template(template_style['structure'], element['content'])
+            elif element_type == 'p':
+                if element.get('has_formatting', False):
+                    hwpml += self._convert_formatted_paragraph(element, template_style)
+                else:
+                    hwpml += self._insert_text_into_template(template_style['structure'], element['content'])
+            elif element_type == 'ul':
+                hwpml += self._convert_list_to_hwpml(element, template_style)
+            elif element_type == 'table':
+                hwpml += self._create_default_table_hwpml(element)
         
         return hwpml
     
-    def _convert_link_to_hwpml(self, a_elem):
-        """Convert an HTML link to HWPML"""
-        # Generate unique field IDs
-        self.field_id_counter += 1
-        field_id = str(self.field_id_counter)
+    def _convert_formatted_paragraph(self, paragraph, template_style):
+        """강조 요소가 있는 단락을 변환"""
+        p_start_match = re.search(r'<P ParaShape="(\d+)"[^>]*>', template_style['structure'])
+        if not p_start_match:
+            return self._create_default_hwpml(paragraph)
         
-        self.inst_id_counter += 1
-        inst_id = str(self.inst_id_counter)
+        para_shape = p_start_match.group(1)
+        normal_char_shape = template_style['char_shape']
         
-        url = a_elem.get('href', '').replace('/', '\\/')
-        text = a_elem.get_text()
+        hwpml = f'<P ParaShape="{para_shape}" Style="0">'
         
-        # Get style from template
-        if 'a' not in self.template_styles or self.template_styles['a'] is None:
-            char_shape = "1"
-            link_text_shape = "10"  # Default link text style
-        else:
-            style = self.template_styles['a']
-            char_shape = style['char_shape']
-            link_text_shape = style.get('link_text_shape', '10')
+        for fragment in paragraph['fragments']:
+            fragment_type = fragment['type']
+            content = fragment['content']
+            
+            if fragment_type == 'text':
+                hwpml += f'<TEXT CharShape="{normal_char_shape}"><CHAR>{content}</CHAR></TEXT>'
+            elif fragment_type == 'strong':
+                # 굵게: 복제된 CharShape 사용
+                hwpml += f'<TEXT CharShape="{self.special_formats["strong"]}"><CHAR>{content}</CHAR></TEXT>'
+            elif fragment_type == 'em':
+                # 기울임: 복제된 CharShape 사용
+                hwpml += f'<TEXT CharShape="{self.special_formats["em"]}"><CHAR>{content}</CHAR></TEXT>'
+            elif fragment_type == 'a':
+                field_id = str(self.field_id_counter + 1)
+                inst_id = str(self.inst_id_counter + 1)
+                self.field_id_counter += 1
+                self.inst_id_counter += 1
+                
+                href = fragment.get('href', '').replace('/', '\\/')
+                command = f"{href};1;0;0;"
+                
+                hwpml += f'<TEXT CharShape="{self.special_formats["underline"]}">'
+                hwpml += f'<FIELDBEGIN Command="{command}" Dirty="true" Editable="false" FieldId="{field_id}" InstId="{inst_id}" Property="0" Type="Hyperlink"/>'
+                hwpml += '</TEXT>'
+                hwpml += f'<TEXT CharShape="{self.special_formats["underline"]}"><CHAR>{content}</CHAR></TEXT>'
+                hwpml += f'<TEXT CharShape="{self.special_formats["underline"]}">'
+                hwpml += f'<FIELDEND Editable="false" FieldId="{field_id}" Property="0" Type="Hyperlink"/>'
+                hwpml += '</TEXT>'
         
-        command = f"{url};1;0;0;"
+        hwpml += '</P>'
         
-        field_begin = (
-            f'<TEXT CharShape="{char_shape}">'
-            f'<FIELDBEGIN Command="{command}" Dirty="true" Editable="false" '
-            f'FieldId="{field_id}" InstId="{inst_id}" Property="0" Type="Hyperlink"/>'
-            f'</TEXT>'
-        )
-        
-        link_text = f'<TEXT CharShape="{link_text_shape}"><CHAR>{text}</CHAR></TEXT>'
-        
-        field_end = (
-            f'<TEXT CharShape="{char_shape}">'
-            f'<FIELDEND Editable="false" FieldId="{field_id}" Property="0" Type="Hyperlink"/>'
-            f'<CHAR/>'
-            f'</TEXT>'
-        )
-        
-        return field_begin + link_text + field_end
+        return hwpml
     
-    def _convert_bold_to_hwpml(self, elem):
-        """Convert bold text to HWPML"""
-        if 'strong' not in self.template_styles or self.template_styles['strong'] is None:
-            char_shape = "8"  # Default bold style
-        else:
-            style = self.template_styles['strong']
-            char_shape = style['char_shape']
+    def _insert_text_into_template(self, template, text, preserve_prefix=True):
+        """
+        텍스트를 템플릿의 CHAR 태그 내에 삽입. 
+        특수문자 접두어를 보존하는 옵션 추가
+        """
+        # 모든 <CHAR>...</CHAR> 태그 찾기
+        char_pattern = re.compile(r'<CHAR>(.*?)</CHAR>')
+        matches = list(char_pattern.finditer(template))
         
-        text = elem.get_text()
-        return f'<TEXT CharShape="{char_shape}"><CHAR>{text}</CHAR></TEXT>'
-    
-    def _convert_italic_to_hwpml(self, elem):
-        """Convert italic text to HWPML"""
-        if 'em' not in self.template_styles or self.template_styles['em'] is None:
-            char_shape = "9"  # Default italic style
+        if matches:
+            # 각 매치의 그룹1(내용)의 길이를 비교하여 가장 긴 매치 선택
+            longest_match = max(matches, key=lambda m: len(m.group(1)))
+            start, end = longest_match.span()
+            original_text = longest_match.group(1)
+            
+            if preserve_prefix:
+                # 특수문자 접두어 추출 (첫 번째 공백 전까지의 문자)
+                prefix_match = re.match(r'^(\s*[^\w\s]+\s+)', original_text)
+                
+                if prefix_match:
+                    prefix = prefix_match.group(1)
+                    replacement = f'<CHAR>{prefix}{text}</CHAR>'
+                else:
+                    replacement = f'<CHAR>{text}</CHAR>'
+            else:
+                replacement = f'<CHAR>{text}</CHAR>'
+                
+            # 템플릿에서 해당 부분만 대체
+            new_template = template[:start] + replacement + template[end:]
+            return new_template
         else:
-            style = self.template_styles['em']
-            char_shape = style['char_shape']
+            # <CHAR> 태그가 없으면 TEXT 태그 내의 CHAR 태그를 대상으로 처리
+            text_pattern = re.compile(r'<TEXT CharShape="(\d+)">(.*?)</TEXT>')
+            match = text_pattern.search(template)
+            if match:
+                char_shape = match.group(1)
+                original_content = match.group(2)
+                
+                # CHAR 태그 내용 추출
+                char_content_match = re.search(r'<CHAR>(.*?)</CHAR>', original_content)
+                if char_content_match and preserve_prefix:
+                    original_text = char_content_match.group(1)
+                    prefix_match = re.match(r'^(\s*[^\w\s]+\s+)', original_text)
+                    
+                    if prefix_match:
+                        prefix = prefix_match.group(1)
+                        replacement = f'<TEXT CharShape="{char_shape}"><CHAR>{prefix}{text}</CHAR></TEXT>'
+                        return template.replace(match.group(0), replacement, 1)
+                
+                replacement = f'<TEXT CharShape="{char_shape}"><CHAR>{text}</CHAR></TEXT>'
+                return template.replace(match.group(0), replacement, 1)
         
-        text = elem.get_text()
-        return f'<TEXT CharShape="{char_shape}"><CHAR>{text}</CHAR></TEXT>'
+        return template
+
     
-    def _convert_table_to_hwpml(self, table_elem):
-        """Convert an HTML table to HWPML"""
-        rows = table_elem.find_all('tr')
+    def _convert_list_to_hwpml(self, list_element, template_style):
+        """리스트를 HWPML로 변환"""
+        hwpml = ""
+        
+        ul_template = template_style['structure']
+        char_shape = template_style['char_shape']
+        
+        top_level_counter = 1
+        
+        for item in list_element['items']:
+            hwpml += self._process_list_item(item, ul_template, char_shape, top_level_counter, is_top_level=True)
+            if item['is_ordered']:
+                top_level_counter += 1
+        
+        return hwpml
+    
+    def _process_list_item(self, item, template, char_shape, top_level_counter, is_top_level=False, counter=None):
+        if counter is None:
+            counter = {}
+        
+        hwpml = ""
+        
+        fragments = item['fragments']
+        level = item.get('level', 0)
+        is_ordered = item.get('is_ordered', False)
+        
+        p_tag_match = re.search(r'<P\s+([^>]+)>', template)
+        p_attributes = p_tag_match.group(1) if p_tag_match else 'Style="0"'
+        
+        if is_ordered:
+            if is_top_level:
+                prefix = f"{top_level_counter}. "
+            else:
+                if level not in counter:
+                    counter[level] = 1
+                prefix = f"{counter[level]}. "
+                counter[level] += 1
+        else:
+            prefix = f"{self.bullet_symbol} "
+        
+        indent = "  " * level
+        hwpml += f'<P {p_attributes}>'
+        hwpml += f'<TEXT CharShape="{char_shape}"><CHAR>{indent}{prefix}</CHAR></TEXT>'
+        
+        for fragment in fragments:
+            fragment_type = fragment['type']
+            content = fragment['content']
+            
+            if fragment_type == 'text':
+                hwpml += f'<TEXT CharShape="{char_shape}"><CHAR>{content}</CHAR></TEXT>'
+            elif fragment_type == 'strong':
+                # 굵게: 복제된 CharShape 사용
+                hwpml += f'<TEXT CharShape="{self.special_formats["strong"]}"><CHAR>{content}</CHAR></TEXT>'
+            elif fragment_type == 'em':
+                # 기울임: 복제된 CharShape 사용
+                hwpml += f'<TEXT CharShape="{self.special_formats["em"]}"><CHAR>{content}</CHAR></TEXT>'
+            elif fragment_type == 'a':
+                field_id = str(self.field_id_counter + 1)
+                inst_id = str(self.inst_id_counter + 1)
+                self.field_id_counter += 1
+                self.inst_id_counter += 1
+                
+                href = fragment.get('href', '').replace('/', '\\/')
+                command = f"{href};1;0;0;"
+                
+                hwpml += f'<TEXT CharShape="{self.special_formats["underline"]}">'
+                hwpml += f'<FIELDBEGIN Command="{command}" Dirty="true" Editable="false" FieldId="{field_id}" InstId="{inst_id}" Property="0" Type="Hyperlink"/>'
+                hwpml += '</TEXT>'
+                hwpml += f'<TEXT CharShape="{self.special_formats["underline"]}"><CHAR>{content}</CHAR></TEXT>'
+                hwpml += f'<TEXT CharShape="{self.special_formats["underline"]}">'
+                hwpml += f'<FIELDEND Editable="false" FieldId="{field_id}" Property="0" Type="Hyperlink"/>'
+                hwpml += '</TEXT>'
+        
+        hwpml += '</P>'
+        
+        if 'nested_items' in item and item['nested_items']:
+            nested_counter = {}
+            for nested_item in item['nested_items']:
+                hwpml += self._process_list_item(nested_item, template, char_shape, top_level_counter, is_top_level=False, counter=nested_counter)
+        
+        return hwpml
+    
+    def _create_default_table_hwpml(self, table_element):
+        """기본 HWPML 표 생성"""
+        rows = table_element['rows']
         row_count = len(rows)
-        col_count = max(len(row.find_all(['td', 'th'])) for row in rows) if rows else 0
+        col_count = max(len(row) for row in rows) if rows else 0
         
-        # Default table width
         total_table_width = 41950
         cell_width = total_table_width // col_count if col_count > 0 else 20975
         
-        # Generate a unique ID for the table
         inst_id = self.inst_id_counter
         self.inst_id_counter += 1
         
-        # Build table structure
-        hwpml = f"""
+        hwpml = f"""<P ParaShape="0" Style="0"><TEXT CharShape="0">
 <TABLE BorderFill="3" CellSpacing="0" ColCount="{col_count}" PageBreak="Cell" RepeatHeader="true" RowCount="{row_count}">
 <SHAPEOBJECT InstId="{inst_id}" Lock="false" NumberingType="Table" TextWrap="TopAndBottom" ZOrder="1">
 <SIZE Height="3846" HeightRelTo="Absolute" Protect="false" Width="{total_table_width}" WidthRelTo="Absolute"/>
@@ -370,77 +815,51 @@ class HWPMLConverter:
 </SHAPEOBJECT>
 <INSIDEMARGIN Bottom="141" Left="510" Right="510" Top="141"/>"""
         
-        # Process rows and cells
-        for row_index, row in enumerate(rows):
+        for row_idx, row in enumerate(rows):
             hwpml += f"\n<ROW>"
-            cells = row.find_all(['td', 'th'])
+            border_fill_id = 3 if row_idx == 0 else (4 if row_idx == row_count - 1 else 6)
             
-            # Fill in missing cells if any
-            while len(cells) < col_count:
-                cells.append(None)
-            
-            for cell_index in range(col_count):
-                cell = cells[cell_index] if cell_index < len(cells) else None
-                
-                # Determine border style based on row position
-                if row_index == 0:
-                    border_fill_id = 3  # First row: solid borders on top and bottom
-                elif row_index == row_count - 1:
-                    border_fill_id = 4  # Last row: dotted top, solid bottom
-                else:
-                    border_fill_id = 6  # Middle rows: dotted borders on top and bottom
-                
+            for cell_idx, cell in enumerate(row):
                 hwpml += f"""
-<CELL BorderFill="{border_fill_id}" ColAddr="{cell_index}" ColSpan="1" Dirty="false" Editable="false" HasMargin="false" Header="false" Height="282" Protect="false" RowAddr="{row_index}" RowSpan="1" Width="{cell_width}">
+<CELL BorderFill="{border_fill_id}" ColAddr="{cell_idx}" ColSpan="1" Dirty="false" Editable="false" HasMargin="false" Header="{str(cell.get('is_header', False)).lower()}" Height="282" Protect="false" RowAddr="{row_idx}" RowSpan="1" Width="{cell_width}">
 <CELLMARGIN Bottom="141" Left="510" Right="510" Top="141"/>
 <PARALIST LineWrap="Break" LinkListID="0" LinkListIDNext="0" TextDirection="0" VertAlign="Center">
-<P ParaShape="0" Style="0">"""
-                
-                # Add cell content
-                hwpml += self._convert_cell_content(cell)
-                
-                hwpml += """
+<P ParaShape="0" Style="0">
+<TEXT CharShape="0"><CHAR>{cell['content']}</CHAR></TEXT>
 </P>
 </PARALIST>
 </CELL>"""
             
             hwpml += f"\n</ROW>"
         
-        hwpml += "\n</TABLE>"
+        hwpml += "\n</TABLE><CHAR/></TEXT></P>"
         
-        # Wrap the table in paragraph tags for proper placement
-        return f'<P ParaShape="0" Style="0"><TEXT CharShape="0">{hwpml}<CHAR/></TEXT></P>\n'
+        return hwpml
     
-    def _convert_cell_content(self, cell):
-        """Convert HTML cell content to HWPML"""
-        if cell is None:
-            return '<TEXT CharShape="0"><CHAR>&#160;</CHAR></TEXT>'  # Empty cell
+    def _create_default_hwpml(self, element):
+        """기본 HWPML 요소 생성"""
+        element_type = element['type']
+        content = element.get('content', '')
         
-        hwpml = ''
+        if element_type in ['h1', 'h2', 'h3', 'h4', 'h5', 'h6']:
+            level = int(element_type[1])
+            para_shape = "0"
+            char_shape = str(level)
+        elif element_type == 'p':
+            para_shape = "0"
+            char_shape = "1"
+        else:
+            para_shape = "0"
+            char_shape = "0"
         
-        if len(list(cell.children)) == 0:
-            content = cell.string if cell.string else "&#160;"
-            return f'<TEXT CharShape="0"><CHAR>{content}</CHAR></TEXT>'
-        
-        for child in cell.children:
-            if isinstance(child, NavigableString):
-                text = str(child).strip()
-                if text:
-                    hwpml += f'<TEXT CharShape="0"><CHAR>{text}</CHAR></TEXT>'
-            elif child.name in ['strong', 'b']:
-                hwpml += self._convert_bold_to_hwpml(child)
-            elif child.name in ['em', 'i']:
-                hwpml += self._convert_italic_to_hwpml(child)
-            elif child.name == 'a':
-                hwpml += self._convert_link_to_hwpml(child)
-        
-        return hwpml if hwpml else '<TEXT CharShape="0"><CHAR>&#160;</CHAR></TEXT>'
+        return f'<P ParaShape="{para_shape}" Style="0"><TEXT CharShape="{char_shape}"><CHAR>{content}</CHAR></TEXT></P>'
 
 
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Markdown to HWP Converter with Template")
+        
+        self.setWindowTitle("마크다운 → HWP 변환기")
         self.setGeometry(100, 100, 600, 400)
         
         self.converter = HWPMLConverter()
@@ -449,24 +868,21 @@ class MainWindow(QMainWindow):
         self.setup_ui()
     
     def setup_ui(self):
-        # Create central widget and layout
         self.central_widget = QWidget()
         self.setCentralWidget(self.central_widget)
+        
         self.layout = QVBoxLayout(self.central_widget)
         
-        # Create text edit area
         self.text_edit = QTextEdit()
-        self.text_edit.setPlaceholderText("Paste your markdown text here or load from clipboard")
+        self.text_edit.setPlaceholderText("여기에 마크다운 텍스트를 붙여넣거나 클립보드에서 불러오세요")
         self.layout.addWidget(self.text_edit)
         
-        # Create button layout
         self.button_layout = QHBoxLayout()
         
-        # Add buttons
-        self.template_button = QPushButton("Select Template")
-        self.clipboard_button = QPushButton("Load from Clipboard")
-        self.save_button = QPushButton("Select Output Path")
-        self.convert_button = QPushButton("Convert")
+        self.template_button = QPushButton("템플릿 선택")
+        self.clipboard_button = QPushButton("클립보드에서 불러오기")
+        self.save_button = QPushButton("출력 경로 선택")
+        self.convert_button = QPushButton("변환")
         
         self.button_layout.addWidget(self.template_button)
         self.button_layout.addWidget(self.clipboard_button)
@@ -475,68 +891,60 @@ class MainWindow(QMainWindow):
         
         self.layout.addLayout(self.button_layout)
         
-        # Create status bar
         self.status_bar = QStatusBar()
         self.setStatusBar(self.status_bar)
-        self.status_bar.showMessage("Ready")
+        self.status_bar.showMessage("준비 완료")
         
-        # Connect signals
         self.template_button.clicked.connect(self.select_template)
         self.clipboard_button.clicked.connect(self.load_from_clipboard)
         self.save_button.clicked.connect(self.select_output_path)
         self.convert_button.clicked.connect(self.convert)
         
-        # Initialize variables
         self.output_path = ""
     
     def select_template(self):
-        file_path, _ = QFileDialog.getOpenFileName(self, "Select Template File", "", "HWP Files (*.hml)")
+        file_path, _ = QFileDialog.getOpenFileName(self, "템플릿 파일 선택", "", "HWP 파일 (*.hml)")
         if file_path:
             self.template_path = file_path
             success = self.converter.load_template(file_path)
-            if success:
-                self.status_bar.showMessage(f"Template loaded: {file_path}")
-            else:
-                self.status_bar.showMessage("Error loading template")
+            self.status_bar.showMessage(f"템플릿 로드 완료: {file_path}" if success else "템플릿 로드 오류")
     
     def load_from_clipboard(self):
         clipboard = QApplication.clipboard()
         md_text = clipboard.text()
         if md_text:
             self.text_edit.setPlainText(md_text)
-            self.status_bar.showMessage("Text loaded from clipboard")
+            self.status_bar.showMessage("클립보드에서 텍스트 로드 완료")
         else:
-            self.status_bar.showMessage("No text in clipboard")
+            self.status_bar.showMessage("클립보드에 텍스트 없음")
     
     def select_output_path(self):
-        file_path, _ = QFileDialog.getSaveFileName(self, "Save HWP File", "", "HWP Files (*.hml)")
+        file_path, _ = QFileDialog.getSaveFileName(self, "HWP 파일 저장", "", "HWP 파일 (*.hml)")
         if file_path:
             self.output_path = file_path
-            self.status_bar.showMessage(f"Output path set: {file_path}")
+            self.status_bar.showMessage(f"출력 경로 설정: {file_path}")
     
     def convert(self):
         if not self.template_path:
-            self.status_bar.showMessage("Error: Please select a template first")
+            self.status_bar.showMessage("오류: 먼저 템플릿을 선택하세요")
             return
         
         if not self.output_path:
-            self.status_bar.showMessage("Error: Please select an output path first")
+            self.status_bar.showMessage("오류: 출력 경로를 선택하세요")
             return
         
         md_text = self.text_edit.toPlainText()
         if not md_text:
-            self.status_bar.showMessage("Error: No text to convert")
+            self.status_bar.showMessage("오류: 변환할 텍스트가 없습니다")
             return
         
-        self.status_bar.showMessage("Converting...")
+        self.status_bar.showMessage("변환 중...")
         
         try:
-            # Check for YAML frontmatter
-            title = "No Title"
-            author = "No Author"
-            date = "No Date"
+            title = "제목 없음"
+            author = "작성자 없음"
+            date = "날짜 없음"
             
-            # Look for title, author, date in YAML frontmatter
             t = re.search(r"(?<=title: ).*", md_text)
             a = re.search(r"(?<=author: ).*", md_text)
             d = re.search(r"(?<=date: ).*", md_text)
@@ -548,20 +956,16 @@ class MainWindow(QMainWindow):
             if d:
                 date = d.group(0).strip()
             
-            # Remove YAML frontmatter
             md_text = re.sub(r'^---\n([\s\S]*?)\n---\n', '', md_text, flags=re.DOTALL)
             
-            # Convert markdown to HWPML
             hwpml_content = self.converter.convert_md_to_hwpml(md_text, title, author, date)
             
-            # Save the result
             with io.open(self.output_path, "w", encoding="utf-8") as f:
                 f.write(hwpml_content)
             
-            self.status_bar.showMessage(f"Conversion completed: {self.output_path}")
-        
+            self.status_bar.showMessage(f"변환 완료: {self.output_path}")
         except Exception as e:
-            self.status_bar.showMessage(f"Error during conversion: {str(e)}")
+            self.status_bar.showMessage(f"변환 중 오류 발생: {str(e)}")
 
 
 if __name__ == "__main__":
