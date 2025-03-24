@@ -1,5 +1,5 @@
 ## 프로그램 실행 방법
-#### 1.다음 명령어를 사용하여 해당 프로젝트를 로컬에 복제합니다.
+#### 1. 다음 명령어를 사용하여 해당 프로젝트를 로컬에 복제합니다.
 git clone https://github.com/Jelly1500/Markdown2HWP_Program.git
 #### 2. python -m venv venv 명령어를 실행해서 가상환경을 생성합니다.
 #### 3. '.\venv\Scripts\activate' 명령어를 실행하여 가상환경에 진입합니다.
