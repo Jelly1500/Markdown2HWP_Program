@@ -873,14 +873,13 @@ class MainWindow(QMainWindow):
         
         # 현재 스크립트의 위치를 기준으로 상대 경로 설정
         current_dir = os.path.dirname(os.path.abspath(__file__))
-        project_root = os.path.dirname(os.path.dirname(current_dir))  # 프로젝트 루트 디렉토리
         
-        # 기본 출력 경로를 파일명까지 포함하여 설정
-        output_dir = os.path.join(project_root, "demo", "convertedDocs")
+        # convertedDocs 디렉토리 경로 설정
+        output_dir = os.path.join(current_dir, "convertedDocs")
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
         
-        # 기본 출력 파일 경로 설정 (파일명 포함)
+        # 기본 출력 파일 경로 설정
         self.output_path = os.path.join(output_dir, "converted.hml")
         
         self.layout = QVBoxLayout(self.central_widget)
