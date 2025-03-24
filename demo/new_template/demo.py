@@ -40,6 +40,10 @@ class HWPMLConverter:
             # CharShape 추출 및 특별 서식 복제
             self.special_formats = self._extract_and_clone_charshapes()
             
+            # 테이블용 테두리 스타일 추가
+            self.table_border_fills = {'header': "3", 'footer': "4", 'body': "6"}  # 기본값
+            self.add_table_borderfills()  # 테이블 테두리 추가 및 ID 갱신
+        
             return True
         except Exception as e:
             print(f"템플릿 로드 오류: {e}")
@@ -659,24 +663,23 @@ class HWPMLConverter:
     
     def _insert_text_into_template(self, template, text, preserve_prefix=True):
         """
-        텍스트를 템플릿의 CHAR 태그 내에 삽입하고, 필요한 경우 셀 너비를 조정하여 줄바꿈을 방지합니다.
-        CHAR 태그가 없는 경우에는 TEXT 태그 내의 CHAR 태그를 대상으로 처리합니다.
+        텍스트를 템플릿의 CHAR 태그 내에 삽입. 
+        특수문자 접두어를 보존하는 옵션 추가
         """
-        import re
-    
         # 모든 <CHAR>...</CHAR> 태그 찾기
         char_pattern = re.compile(r'<CHAR>(.*?)</CHAR>')
         matches = list(char_pattern.finditer(template))
-    
+        
         if matches:
-            # CHAR 태그 처리 (셀 너비 조정 포함)
+            # 각 매치의 그룹1(내용)의 길이를 비교하여 가장 긴 매치 선택
             longest_match = max(matches, key=lambda m: len(m.group(1)))
             start, end = longest_match.span()
             original_text = longest_match.group(1)
-    
-            # 접두어 처리
+            
             if preserve_prefix:
+                # 특수문자 접두어 추출 (첫 번째 공백 전까지의 문자)
                 prefix_match = re.match(r'^(\s*[^\w\s]+\s+)', original_text)
+                
                 if prefix_match:
                     prefix = prefix_match.group(1)
                     replacement = f'<CHAR>{prefix}{text}</CHAR>'
@@ -684,88 +687,35 @@ class HWPMLConverter:
                     replacement = f'<CHAR>{text}</CHAR>'
             else:
                 replacement = f'<CHAR>{text}</CHAR>'
-    
-            # 텍스트 길이 변화에 따른 셀 너비 조정
-            original_len = len(original_text.strip())
-            new_len = len(text.strip())
-    
-            MAX_TABLE_WIDTH = 41950
-            new_template = template
-            if new_len > original_len * 1.2:  # 새 텍스트가 20% 이상 길면 셀 너비 조정
-                # 1. 먼저 CHAR 태그의 위치 확인
-                char_pos = template.find(longest_match.group(0))
-    
-                # 2. CHAR 태그 이전의 가장 가까운 CELL 태그 찾기
-                cell_start_pattern = re.compile(r'<CELL\s+[^>]*?Width="(\d+)"')
-                cell_matches = list(cell_start_pattern.finditer(template[:char_pos]))
-    
-                if cell_matches:
-                    nearest_cell = cell_matches[-1]  # 가장 마지막(가장 가까운) CELL
-                    cell_width = int(nearest_cell.group(1))
-    
-                    # 새 너비 계산 - 여기서 multiplier 최댓값을 5.0으로 변경
-                    ratio = new_len / max(original_len, 1)
-                    multiplier = min(max(ratio, 1.2), 5.0)  # 2.5에서 5.0으로 변경
-                    new_cell_width = int(cell_width * multiplier)
-                    width_diff = new_cell_width - cell_width
-    
-                    # 셀 너비가 최대 테이블 너비를 넘지 않도록 제한
-                    if new_cell_width > MAX_TABLE_WIDTH:
-                        new_cell_width = MAX_TABLE_WIDTH
-                        width_diff = new_cell_width - cell_width
-    
-                    # 셀 너비 변경 (너비 속성만 교체)
-                    new_template = template[:nearest_cell.start(1)] + str(new_cell_width) + template[nearest_cell.end(1):]
-    
-                    # 테이블 전체 너비도 조정 (SHAPEOBJECT 내 SIZE 태그 찾기)
-                    size_pattern = re.compile(r'<SIZE\s+[^>]*?Width="(\d+)"[^>]*?>')
-                    table_section = template[:nearest_cell.start()]
-                    size_matches = list(size_pattern.finditer(table_section))
-                    if size_matches:
-                        last_size = size_matches[-1]  # 가장 가까운 SIZE 태그
-                        table_width = int(last_size.group(1))
-                        new_table_width = table_width + width_diff
-    
-                        # 테이블 너비가 최대 테이블 너비를 넘지 않도록 제한
-                        if new_table_width > MAX_TABLE_WIDTH:
-                            new_table_width = MAX_TABLE_WIDTH
-                            width_diff = new_table_width - table_width  # width_diff 업데이트
-    
-                        # 테이블 너비 변경
-                        new_template = new_template[:last_size.start(1)] + str(new_table_width) + new_template[last_size.end(1):]
-    
-                        # 템플릿이 변경되었으므로 CHAR 태그 위치 업데이트
-                        char_pos_new = new_template.find(longest_match.group(0))
-                        if char_pos_new != -1:
-                            start = char_pos_new
-                            end = start + len(longest_match.group(0))
-    
-            # 내용 삽입
-            new_template = new_template[:start] + replacement + new_template[end:]
+                
+            # 템플릿에서 해당 부분만 대체
+            new_template = template[:start] + replacement + template[end:]
             return new_template
-    
         else:
-            # CHAR 태그를 찾지 못한 경우: TEXT 태그 내의 CHAR 태그를 대상으로 처리
+            # <CHAR> 태그가 없으면 TEXT 태그 내의 CHAR 태그를 대상으로 처리
             text_pattern = re.compile(r'<TEXT CharShape="(\d+)">(.*?)</TEXT>')
             match = text_pattern.search(template)
             if match:
                 char_shape = match.group(1)
                 original_content = match.group(2)
-                # TEXT 태그 내에 포함된 CHAR 태그 내용 추출
+                
+                # CHAR 태그 내용 추출
                 char_content_match = re.search(r'<CHAR>(.*?)</CHAR>', original_content)
                 if char_content_match and preserve_prefix:
                     original_text = char_content_match.group(1)
                     prefix_match = re.match(r'^(\s*[^\w\s]+\s+)', original_text)
+                    
                     if prefix_match:
                         prefix = prefix_match.group(1)
                         replacement = f'<TEXT CharShape="{char_shape}"><CHAR>{prefix}{text}</CHAR></TEXT>'
                         return template.replace(match.group(0), replacement, 1)
+                
                 replacement = f'<TEXT CharShape="{char_shape}"><CHAR>{text}</CHAR></TEXT>'
                 return template.replace(match.group(0), replacement, 1)
-    
+        
         return template
 
-
+    
     def _convert_list_to_hwpml(self, list_element, template_style):
         """리스트를 HWPML로 변환"""
         hwpml = ""
@@ -854,48 +804,102 @@ class HWPMLConverter:
 
         return hwpml
 
+    def add_table_borderfills(self):
+        """테이블용 BORDERFILL 요소를 추가하는 함수"""
+        soup = BeautifulSoup(self.template_content, 'xml')
 
+        # BORDERFILLLIST 찾기
+        borderfill_list = soup.find('BORDERFILLLIST')
+        if not borderfill_list:
+            print("BORDERFILLLIST를 찾을 수 없습니다.")
+            return False
+
+        # 기존 ID 중 가장 큰 값 찾기
+        existing_ids = [int(bf.get('Id', '0')) for bf in borderfill_list.find_all('BORDERFILL')]
+        next_id = max(existing_ids) + 1 if existing_ids else 1
+
+        # 테이블용 테두리 스타일 정의 - 유형별 순서 정정
+        table_borderfills = [
+            # 헤더용 테두리 (상하좌우 모두 실선) - ID: next_id
+            """<BORDERFILL BackSlash="0" BreakCellSeparateLine="0" CenterLine="0" CounterBackSlash="0" CounterSlash="0" CrookedSlash="0" Id="{}" Shadow="false" Slash="0" ThreeD="false">
+            <LEFTBORDER Type="Solid" Width="0.12mm"/>
+            <RIGHTBORDER Type="Solid" Width="0.12mm"/>
+            <TOPBORDER Type="Solid" Width="0.12mm"/>
+            <BOTTOMBORDER Type="Solid" Width="0.12mm"/>
+            <DIAGONAL Type="Solid" Width="0.1mm"/>
+            </BORDERFILL>""",
+
+            # 마지막 행용 테두리 (상단 점선, 하단 실선) - ID: next_id + 1
+            """<BORDERFILL BackSlash="0" BreakCellSeparateLine="0" CenterLine="0" CounterBackSlash="0" CounterSlash="0" CrookedSlash="0" Id="{}" Shadow="false" Slash="0" ThreeD="false">
+            <LEFTBORDER Type="Solid" Width="0.12mm"/>
+            <RIGHTBORDER Type="Solid" Width="0.12mm"/>
+            <TOPBORDER Type="Dot" Width="0.3mm"/>
+            <BOTTOMBORDER Type="Solid" Width="0.12mm"/>
+            <DIAGONAL Type="Solid" Width="0.1mm"/>
+            </BORDERFILL>""",
+
+            # 중간 행용 테두리 (상단 실선, 하단 점선) - ID: next_id + 2
+            """<BORDERFILL BackSlash="0" BreakCellSeparateLine="0" CenterLine="0" CounterBackSlash="0" CounterSlash="0" CrookedSlash="0" Id="{}" Shadow="false" Slash="0" ThreeD="false">
+            <LEFTBORDER Type="Solid" Width="0.12mm"/>
+            <RIGHTBORDER Type="Solid" Width="0.12mm"/>
+            <TOPBORDER Type="Dot" Width="0.3mm"/>
+            <BOTTOMBORDER Type="Dot" Width="0.3mm"/>
+            <DIAGONAL Type="Solid" Width="0.1mm"/>
+            </BORDERFILL>"""
+        ]
+
+        # 테이블 테두리 ID 저장 - 명확한 의미 부여
+        self.table_border_fills = {
+            'header': str(next_id),      # 헤더용 (상하좌우 모두 실선)
+            'footer': str(next_id + 1),  # 마지막 행용 (상단 점선, 하단 실선)
+            'body': str(next_id + 2)     # 중간 행용 (상단 실선, 하단 점선)
+        }
+
+        # BORDERFILL 요소 추가
+        for i, bf_template in enumerate(table_borderfills):
+            new_id = next_id + i
+            bf_soup = BeautifulSoup(bf_template.format(new_id), 'xml')
+            borderfill_list.append(bf_soup.find('BORDERFILL'))
+
+        # Count 속성 업데이트
+        borderfill_list['Count'] = str(len(borderfill_list.find_all('BORDERFILL')))
+
+        # 템플릿 내용 업데이트
+        self.template_content = str(soup)
+        return True
     
     def _create_default_table_hwpml(self, table_element):
         """기본 HWPML 표 생성"""
         rows = table_element['rows']
         row_count = len(rows)
         col_count = max(len(row) for row in rows) if rows else 0
-        
+
         total_table_width = 41950
         cell_width = total_table_width // col_count if col_count > 0 else 20975
-        
+
         inst_id = self.inst_id_counter
         self.inst_id_counter += 1
-        
-        hwpml = f"""<P ParaShape="0" Style="0"><TEXT CharShape="0">
-<TABLE BorderFill="3" CellSpacing="0" ColCount="{col_count}" PageBreak="Cell" RepeatHeader="true" RowCount="{row_count}">
-<SHAPEOBJECT InstId="{inst_id}" Lock="false" NumberingType="Table" TextWrap="TopAndBottom" ZOrder="1">
-<SIZE Height="3846" HeightRelTo="Absolute" Protect="false" Width="{total_table_width}" WidthRelTo="Absolute"/>
-<POSITION AffectLSpacing="false" AllowOverlap="false" FlowWithText="true" HoldAnchorAndSO="false" HorzAlign="Left" HorzOffset="0" HorzRelTo="Column" TreatAsChar="false" VertAlign="Top" VertOffset="0" VertRelTo="Para"/>
-<OUTSIDEMARGIN Bottom="283" Left="283" Right="283" Top="283"/>
-</SHAPEOBJECT>
-<INSIDEMARGIN Bottom="141" Left="510" Right="510" Top="141"/>"""
-        
+
+        hwpml = f"""<P ParaShape="0" Style="0"><TEXT CharShape="0"> <TABLE BorderFill="{self.table_border_fills['header']}" CellSpacing="0" ColCount="{col_count}" PageBreak="Cell" RepeatHeader="true" RowCount="{row_count}"> <SHAPEOBJECT InstId="{inst_id}" Lock="false" NumberingType="Table" TextWrap="TopAndBottom" ZOrder="1"> <SIZE Height="3846" HeightRelTo="Absolute" Protect="false" Width="{total_table_width}" WidthRelTo="Absolute"/> <POSITION AffectLSpacing="false" AllowOverlap="false" FlowWithText="true" HoldAnchorAndSO="false" HorzAlign="Left" HorzOffset="0" HorzRelTo="Column" TreatAsChar="false" VertAlign="Top" VertOffset="0" VertRelTo="Para"/> <OUTSIDEMARGIN Bottom="283" Left="283" Right="283" Top="283"/> </SHAPEOBJECT> <INSIDEMARGIN Bottom="141" Left="510" Right="510" Top="141"/>"""
+
         for row_idx, row in enumerate(rows):
             hwpml += f"\n<ROW>"
-            border_fill_id = 3 if row_idx == 0 else (4 if row_idx == row_count - 1 else 6)
-            
+
+            # 행 위치에 따라 다른 테두리 스타일 적용
+            if row_idx == 0:  # 첫번째 행 (헤더)
+                border_fill_id = self.table_border_fills['header']
+            elif row_idx == row_count - 1:  # 마지막 행
+                border_fill_id = self.table_border_fills['footer']
+            else:  # 중간 행
+                border_fill_id = self.table_border_fills['body']
+
             for cell_idx, cell in enumerate(row):
-                hwpml += f"""
-<CELL BorderFill="{border_fill_id}" ColAddr="{cell_idx}" ColSpan="1" Dirty="false" Editable="false" HasMargin="false" Header="{str(cell.get('is_header', False)).lower()}" Height="282" Protect="false" RowAddr="{row_idx}" RowSpan="1" Width="{cell_width}">
-<CELLMARGIN Bottom="141" Left="510" Right="510" Top="141"/>
-<PARALIST LineWrap="Break" LinkListID="0" LinkListIDNext="0" TextDirection="0" VertAlign="Center">
-<P ParaShape="0" Style="0">
-<TEXT CharShape="0"><CHAR>{cell['content']}</CHAR></TEXT>
-</P>
-</PARALIST>
-</CELL>"""
-            
+                hwpml += f""" <CELL BorderFill="{border_fill_id}" ColAddr="{cell_idx}" ColSpan="1" Dirty="false" Editable="false" HasMargin="false" Header="{str(cell.get('is_header', False)).lower()}" Height="282" Protect="false" RowAddr="{row_idx}" RowSpan="1" Width="{cell_width}"> <CELLMARGIN Bottom="141" Left="510" Right="510" Top="141"/> <PARALIST LineWrap="Break" LinkListID="0" LinkListIDNext="0" TextDirection="0" VertAlign="Center"> <P ParaShape="0" Style="0"> <TEXT CharShape="0"><CHAR>{cell['content']}</CHAR></TEXT> </P> </PARALIST> </CELL>"""
+
             hwpml += f"\n</ROW>"
-        
+
         hwpml += "\n</TABLE><CHAR/></TEXT></P>"
-        
+
         return hwpml
     
     def _create_default_hwpml(self, element):
@@ -933,6 +937,18 @@ class MainWindow(QMainWindow):
         self.central_widget = QWidget()
         self.setCentralWidget(self.central_widget)
         
+        # 현재 스크립트의 위치를 기준으로 상대 경로 설정
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        project_root = os.path.dirname(os.path.dirname(current_dir))  # 프로젝트 루트 디렉토리
+        
+        # 기본 출력 경로를 파일명까지 포함하여 설정
+        output_dir = os.path.join(project_root, "demo", "convertedDocs")
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir)
+        
+        # 기본 출력 파일 경로 설정 (파일명 포함)
+        self.output_path = os.path.join(output_dir, "converted.hml")
+        
         self.layout = QVBoxLayout(self.central_widget)
         
         self.text_edit = QTextEdit()
@@ -961,8 +977,6 @@ class MainWindow(QMainWindow):
         self.clipboard_button.clicked.connect(self.load_from_clipboard)
         self.save_button.clicked.connect(self.select_output_path)
         self.convert_button.clicked.connect(self.convert)
-        
-        self.output_path = ""
     
     def select_template(self):
         file_path, _ = QFileDialog.getOpenFileName(self, "템플릿 파일 선택", "", "HWP 파일 (*.hml)")
