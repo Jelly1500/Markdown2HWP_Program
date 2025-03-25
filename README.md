@@ -1,13 +1,29 @@
-# main.py 실행 방법
+## 프로그램 실행 방법
+#### 1. 다음 명령어를 사용하여 해당 프로젝트를 로컬에 복제합니다.
+git clone https://github.com/Jelly1500/Markdown2HWP_Program.git
+#### 2. python -m venv venv 명령어를 실행해서 가상환경을 생성합니다.
+#### 3. '.\venv\Scripts\activate' 명령어를 실행하여 가상환경에 진입합니다.
+#### 3-1. 다음과 같은 오류가 발생한다면 다음 명령어를 입력합니다.
+```
++ CategoryInfo          : 보안 오류: (:) [], PSSecurityException
++ FullyQualifiedErrorId : UnauthorizedAccess
+```
+```
+Get-ExecutionPolicy
+```
+<br>
+위의 명령어 실행 후 Restricted가 출력된다면 아래의 명령어를 실행합니다.
+```
+Set-ExecutionPolicy Unrestricted -Scope CurrentUser
+```
+이후 .\venv\Scripts\activate 명령어를 다시 실행합니다.
 
-1. 프로젝트를 클론해서 해당 폴더 위치에 터미널을 엽니다.
-2. python -m venv venv 명령어를 실행해서 가상환경을 생성합니다.
-3. .\venv\Scripts\activate 명령어를 실행하여 가상환경에 진입합니다.
-4. pip install -r requirements.txt 명령어를 실행해서 필요한 의존성들을 설치합니다. (단, requirements.txt가 존재하는 폴더로 이동하셔야 합니다.)
-5. main.py를 실행합니다.
-
-# 사용 방법 소개
-
-1. 변환하고 싶은 마크다운 문서를 Markdown Editor에 넣습니다. 그러면 Preview 화면에 변환된 모습을 미리 볼 수 있습니다.
-2. 저장 위치 선택 버튼을 눌러서 변환된 한글 파일을 저장할 경로를 지정합니다.
-3. hwp로 변환 버튼을 누르면 변환된 한글 파일이 저장됩니다.
+#### 4. pip install -r requirements.txt 명령어를 실행해서 필요한 의존성들을 설치합니다.
+#### 5. 아래의 명령어를 실행합니다.
+```
+python .\demo\new_template\demo.py
+```
+#### 6.(선택사항) 보안을 위해 작업이 끝난 후 실행 정책을 원래대로 복구합니다.
+```
+Set-ExecutionPolicy Restricted -Scope CurrentUser
+```
