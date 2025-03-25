@@ -1111,6 +1111,12 @@ class MainWindow(QMainWindow):
                 f.write(hwpml_content)
             
             self.status_bar.showMessage(f"변환 완료: {self.output_path}")
+            
+            # 변환 완료 후 파일 자동 실행
+            try:
+                os.startfile(self.output_path)
+            except Exception as e:
+                self.status_bar.showMessage(f"파일을 자동으로 열지 못했습니다: {str(e)}")
         except Exception as e:
             self.status_bar.showMessage(f"변환 중 오류 발생: {str(e)}")
 
