@@ -7,6 +7,7 @@ import xml.etree.ElementTree as ET
 from bs4 import BeautifulSoup, NavigableString
 from PySide6.QtWidgets import (QApplication, QMainWindow, QTextEdit, QPushButton, QFileDialog, QVBoxLayout, QHBoxLayout, QWidget, QStatusBar)
 from PySide6.QtGui import QIcon
+import datetime
 
 class HWPMLConverter:
     def __init__(self):
@@ -1018,7 +1019,8 @@ class MainWindow(QMainWindow):
             os.makedirs(output_dir)
         
         # 기본 출력 파일 경로 설정
-        self.output_path = os.path.join(output_dir, "converted.hml")
+        self.output_dir = output_dir
+        self.output_path = None  # output_path 초기화
         
         self.layout = QVBoxLayout(self.central_widget)
         
@@ -1076,9 +1078,9 @@ class MainWindow(QMainWindow):
             self.status_bar.showMessage("오류: 먼저 템플릿을 선택하세요")
             return
         
-        if not self.output_path:
-            self.status_bar.showMessage("오류: 출력 경로를 선택하세요")
-            return
+        # 매번 새로운 타임스탬프로 파일명 생성
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        self.output_path = os.path.join(self.output_dir, f"converted_{timestamp}.hml")
         
         md_text = self.text_edit.toPlainText()
         if not md_text:
