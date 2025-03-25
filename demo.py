@@ -28,6 +28,48 @@ class HWPMLConverter:
         
         # 순서 없는 리스트에 사용할 글머리표 특수기호
         self.bullet_symbol = "•"  # 기본 글머리표
+        
+        # 특수 문자 증가를 위한 카운터 저장 딕셔너리
+        self.special_char_counters = {}  # {템플릿_타입: {특수문자_유형: 현재_카운터}}
+        
+        # 특수 문자 유니코드 매핑
+        self.special_char_maps = {
+            'circled_numbers': {  # 원형 숫자 ① ② ③
+                'range': (0x2460, 0x2473),  # U+2460 ~ U+2473
+                'base_value': 1,  # ①(U+2460) = 1
+                'max_count': 20
+            },
+            'parenthesized_numbers': {  # 괄호 숫자 ⑴ ⑵ ⑶
+                'range': (0x2474, 0x2487),  # U+2474 ~ U+2487
+                'base_value': 1,  # ⑴(U+2474) = 1
+                'max_count': 20
+            },
+            'period_numbers': {  # 마침표 숫자 ⒈ ⒉ ⒊
+                'range': (0x2488, 0x249B),  # U+2488 ~ U+249B
+                'base_value': 1,  # ⒈(U+2488) = 1
+                'max_count': 20
+            },
+            'circled_uppercase': {  # 원형 알파벳(대문자) Ⓐ Ⓑ Ⓒ
+                'range': (0x24B6, 0x24CF),  # U+24B6 ~ U+24CF
+                'base_value': ord('A'),  # Ⓐ(U+24B6) = A
+                'max_count': 26
+            },
+            'circled_lowercase': {  # 원형 알파벳(소문자) ⓐ ⓑ ⓒ
+                'range': (0x24D0, 0x24E9),  # U+24D0 ~ U+24E9
+                'base_value': ord('a'),  # ⓐ(U+24D0) = a
+                'max_count': 26
+            },
+            'roman_uppercase': {  # 로마 숫자(대문자) Ⅰ Ⅱ Ⅲ
+                'range': (0x2160, 0x216B),  # U+2160 ~ U+216B
+                'base_value': 1,  # Ⅰ(U+2160) = 1
+                'max_count': 12
+            },
+            'roman_lowercase': {  # 로마 숫자(소문자) ⅰ ⅱ ⅲ
+                'range': (0x2170, 0x217B),  # U+2170 ~ U+217B
+                'base_value': 1,  # ⅰ(U+2170) = 1
+                'max_count': 12
+            }
+        }
 
     def load_template(self, template_path):
         """HWPML 템플릿 파일을 로드하고 서식 구조 추출"""
@@ -311,6 +353,9 @@ class HWPMLConverter:
         if not hasattr(self, 'template_content'):
             raise ValueError("템플릿이 로드되지 않았습니다. 먼저 load_template() 호출 필요")
         
+        # 특수 문자 카운터 초기화
+        self.special_char_counters = {}
+        
         html = mistune.html(md_text)
         soup = BeautifulSoup(html, 'html.parser')
         md_elements = self._extract_markdown_elements(soup)
@@ -330,7 +375,7 @@ class HWPMLConverter:
         return result
     
     def _extract_markdown_elements(self, soup):
-        """HTML에서 마크다운 요소 추출"""
+        """마크다운 내용에서 요소 추출"""
         elements = []
         
         for tag in soup.find_all(True, recursive=False):
@@ -666,11 +711,26 @@ class HWPMLConverter:
         """
         텍스트를 템플릿의 CHAR 태그 내에 삽입하고, 필요한 경우 셀 너비를 조정하여 줄바꿈을 방지합니다.
         CHAR 태그가 없는 경우에는 TEXT 태그 내의 CHAR 태그를 대상으로 처리합니다.
+        특수 문자(원형 숫자 등)가 있는 경우 해당 문자를 적절히 증가시킵니다.
         """
         import re
 
         # 최대 테이블 너비 설정
         MAX_TABLE_WIDTH = 42250
+        
+        # 템플릿 타입 식별 (h1, h2, p 등)
+        template_type = None
+        for style_type, style_info in self.template_styles.items():
+            if style_info and style_info.get('structure') == template:
+                template_type = style_type
+                break
+
+        # 템플릿 타입을 찾지 못한 경우 고유 ID 생성
+        if template_type is None:
+            template_type = f"unknown_{hash(template) % 10000}"
+        
+        # 특수 문자 처리
+        template = self._process_special_chars_in_template(template, template_type, text)
 
         # 모든 <CHAR>...</CHAR> 태그 찾기
         char_pattern = re.compile(r'<CHAR>(.*?)</CHAR>')
@@ -992,6 +1052,112 @@ class HWPMLConverter:
             char_shape = "0"
         
         return f'<P ParaShape="{para_shape}" Style="0"><TEXT CharShape="{char_shape}"><CHAR>{content}</CHAR></TEXT></P>'
+
+    def _identify_special_char(self, char):
+        """특수 문자가 어떤 유형인지 식별하고 정보 반환"""
+        code_point = ord(char)
+        
+        for char_type, info in self.special_char_maps.items():
+            start, end = info['range']
+            if start <= code_point <= end:
+                # 특수 문자의 현재 값(숫자나 알파벳 순서) 계산
+                if char_type in ['circled_uppercase', 'circled_lowercase']:
+                    value = chr(code_point - start + info['base_value'])
+                else:
+                    value = code_point - start + info['base_value']
+                return {
+                    'type': char_type,
+                    'value': value,
+                    'code_point': code_point,
+                    'info': info
+                }
+        
+        return None
+    
+    def _increment_special_char(self, char, template_type):
+        """특수 문자를 식별하고 증가된 값의 문자 반환"""
+        special_char_info = self._identify_special_char(char)
+        if not special_char_info:
+            return char  # 특수 문자가 아니면 그대로 반환
+        
+        char_type = special_char_info['type']
+        
+        # 해당 템플릿 타입에 대한 카운터 가져오기
+        if template_type not in self.special_char_counters:
+            self.special_char_counters[template_type] = {}
+        
+        type_counters = self.special_char_counters[template_type]
+        
+        # 해당 특수 문자 타입의 카운터 가져오기 또는 초기화
+        if char_type not in type_counters:
+            # 최초 발견 시 현재 값으로 설정 (1부터 시작)
+            type_counters[char_type] = 1
+        else:
+            # 이미 카운터가 있으면 증가
+            type_counters[char_type] += 1
+        
+        # 최대값 확인
+        max_count = special_char_info['info']['max_count']
+        if type_counters[char_type] > max_count:
+            type_counters[char_type] = 1  # 최대값 초과 시 1로 리셋
+        
+        # 증가된 값에 해당하는 유니코드 문자 반환
+        start, _ = special_char_info['info']['range']
+        next_value = type_counters[char_type]
+        
+        if char_type in ['circled_uppercase', 'circled_lowercase']:
+            # 알파벳의 경우 기준 문자(A/a)에서 얼마나 떨어져 있는지 계산
+            base_value = special_char_info['info']['base_value']
+            offset = next_value - 1  # 1부터 시작하므로 1을 빼줌
+            next_code_point = start + offset
+        else:
+            # 숫자의 경우 base_value(대부분 1)에서 얼마나 떨어져 있는지 계산
+            base_value = special_char_info['info']['base_value']
+            offset = next_value - 1  # 1부터 시작하므로 1을 빼줌
+            next_code_point = start + offset
+        
+        return chr(next_code_point)
+    
+    def _process_special_chars_in_template(self, template, template_type, text):
+        """템플릿 내의 특수 문자를 처리하여 자동 증가시킴"""
+        import re
+        
+        # 모든 <CHAR>...</CHAR> 태그 찾기
+        char_pattern = re.compile(r'<CHAR>(.*?)</CHAR>')
+        matches = list(char_pattern.finditer(template))
+        
+        if not matches:
+            return template
+        
+        # 각 매치에 대해 특수 문자 증가 적용
+        new_template = template
+        offset = 0  # 문자열 길이 변화에 따른 오프셋
+        
+        for match in matches:
+            start, end = match.span()
+            start += offset
+            end += offset
+            original_content = match.group(1)
+            
+            # 텍스트가 삽입될 위치인 가장 긴 CHAR 태그 건너뛰기
+            if match == max(matches, key=lambda m: len(m.group(1))):
+                continue
+            
+            # 특수 문자 찾기 및 처리
+            new_content = original_content
+            for i, char in enumerate(original_content):
+                special_char_info = self._identify_special_char(char)
+                if special_char_info:
+                    next_char = self._increment_special_char(char, template_type)
+                    new_content = new_content[:i] + next_char + new_content[i+1:]
+            
+            # 내용에 변경이 있으면 교체
+            if new_content != original_content:
+                replacement = f'<CHAR>{new_content}</CHAR>'
+                new_template = new_template[:start] + replacement + new_template[end:]
+                offset += len(replacement) - (end - start)
+        
+        return new_template
 
 
 class MainWindow(QMainWindow):
