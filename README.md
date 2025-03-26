@@ -13,6 +13,7 @@ Get-ExecutionPolicy
 ```
 <br>
 위의 명령어 실행 후 Restricted가 출력된다면 아래의 명령어를 실행합니다.
+
 ```
 Set-ExecutionPolicy Unrestricted -Scope CurrentUser
 ```
