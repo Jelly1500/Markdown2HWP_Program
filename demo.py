@@ -7,6 +7,7 @@ import xml.etree.ElementTree as ET
 from bs4 import BeautifulSoup, NavigableString
 from PySide6.QtWidgets import (QApplication, QMainWindow, QTextEdit, QPushButton, QFileDialog, QVBoxLayout, QHBoxLayout, QWidget, QStatusBar)
 from PySide6.QtGui import QIcon
+import datetime
 
 class HWPMLConverter:
     def __init__(self):
@@ -27,6 +28,48 @@ class HWPMLConverter:
         
         # 순서 없는 리스트에 사용할 글머리표 특수기호
         self.bullet_symbol = "•"  # 기본 글머리표
+        
+        # 특수 문자 증가를 위한 카운터 저장 딕셔너리
+        self.special_char_counters = {}  # {템플릿_타입: {특수문자_유형: 현재_카운터}}
+        
+        # 특수 문자 유니코드 매핑
+        self.special_char_maps = {
+            'circled_numbers': {  # 원형 숫자 ① ② ③
+                'range': (0x2460, 0x2473),  # U+2460 ~ U+2473
+                'base_value': 1,  # ①(U+2460) = 1
+                'max_count': 20
+            },
+            'parenthesized_numbers': {  # 괄호 숫자 ⑴ ⑵ ⑶
+                'range': (0x2474, 0x2487),  # U+2474 ~ U+2487
+                'base_value': 1,  # ⑴(U+2474) = 1
+                'max_count': 20
+            },
+            'period_numbers': {  # 마침표 숫자 ⒈ ⒉ ⒊
+                'range': (0x2488, 0x249B),  # U+2488 ~ U+249B
+                'base_value': 1,  # ⒈(U+2488) = 1
+                'max_count': 20
+            },
+            'circled_uppercase': {  # 원형 알파벳(대문자) Ⓐ Ⓑ Ⓒ
+                'range': (0x24B6, 0x24CF),  # U+24B6 ~ U+24CF
+                'base_value': ord('A'),  # Ⓐ(U+24B6) = A
+                'max_count': 26
+            },
+            'circled_lowercase': {  # 원형 알파벳(소문자) ⓐ ⓑ ⓒ
+                'range': (0x24D0, 0x24E9),  # U+24D0 ~ U+24E9
+                'base_value': ord('a'),  # ⓐ(U+24D0) = a
+                'max_count': 26
+            },
+            'roman_uppercase': {  # 로마 숫자(대문자) Ⅰ Ⅱ Ⅲ
+                'range': (0x2160, 0x216B),  # U+2160 ~ U+216B
+                'base_value': 1,  # Ⅰ(U+2160) = 1
+                'max_count': 12
+            },
+            'roman_lowercase': {  # 로마 숫자(소문자) ⅰ ⅱ ⅲ
+                'range': (0x2170, 0x217B),  # U+2170 ~ U+217B
+                'base_value': 1,  # ⅰ(U+2170) = 1
+                'max_count': 12
+            }
+        }
 
     def load_template(self, template_path):
         """HWPML 템플릿 파일을 로드하고 서식 구조 추출"""
@@ -40,6 +83,10 @@ class HWPMLConverter:
             # CharShape 추출 및 특별 서식 복제
             self.special_formats = self._extract_and_clone_charshapes()
             
+            # 테이블용 테두리 스타일 추가
+            self.table_border_fills = {'header': "3", 'footer': "4", 'body': "6"}  # 기본값
+            self.add_table_borderfills()  # 테이블 테두리 추가 및 ID 갱신
+        
             return True
         except Exception as e:
             print(f"템플릿 로드 오류: {e}")
@@ -306,6 +353,9 @@ class HWPMLConverter:
         if not hasattr(self, 'template_content'):
             raise ValueError("템플릿이 로드되지 않았습니다. 먼저 load_template() 호출 필요")
         
+        # 특수 문자 카운터 초기화
+        self.special_char_counters = {}
+        
         html = mistune.html(md_text)
         soup = BeautifulSoup(html, 'html.parser')
         md_elements = self._extract_markdown_elements(soup)
@@ -325,7 +375,7 @@ class HWPMLConverter:
         return result
     
     def _extract_markdown_elements(self, soup):
-        """HTML에서 마크다운 요소 추출"""
+        """마크다운 내용에서 요소 추출"""
         elements = []
         
         for tag in soup.find_all(True, recursive=False):
@@ -659,23 +709,42 @@ class HWPMLConverter:
     
     def _insert_text_into_template(self, template, text, preserve_prefix=True):
         """
-        텍스트를 템플릿의 CHAR 태그 내에 삽입. 
-        특수문자 접두어를 보존하는 옵션 추가
+        텍스트를 템플릿의 CHAR 태그 내에 삽입하고, 필요한 경우 셀 너비를 조정하여 줄바꿈을 방지합니다.
+        CHAR 태그가 없는 경우에는 TEXT 태그 내의 CHAR 태그를 대상으로 처리합니다.
+        특수 문자(원형 숫자 등)가 있는 경우 해당 문자를 적절히 증가시킵니다.
         """
+        import re
+
+        # 최대 테이블 너비 설정
+        MAX_TABLE_WIDTH = 42250
+        
+        # 템플릿 타입 식별 (h1, h2, p 등)
+        template_type = None
+        for style_type, style_info in self.template_styles.items():
+            if style_info and style_info.get('structure') == template:
+                template_type = style_type
+                break
+
+        # 템플릿 타입을 찾지 못한 경우 고유 ID 생성
+        if template_type is None:
+            template_type = f"unknown_{hash(template) % 10000}"
+        
+        # 특수 문자 처리
+        template = self._process_special_chars_in_template(template, template_type, text)
+
         # 모든 <CHAR>...</CHAR> 태그 찾기
         char_pattern = re.compile(r'<CHAR>(.*?)</CHAR>')
         matches = list(char_pattern.finditer(template))
-        
+
         if matches:
-            # 각 매치의 그룹1(내용)의 길이를 비교하여 가장 긴 매치 선택
+            # 가장 긴 매치 선택 (주요 내용일 가능성이 높음)
             longest_match = max(matches, key=lambda m: len(m.group(1)))
             start, end = longest_match.span()
             original_text = longest_match.group(1)
-            
+
+            # 접두어 처리
             if preserve_prefix:
-                # 특수문자 접두어 추출 (첫 번째 공백 전까지의 문자)
                 prefix_match = re.match(r'^(\s*[^\w\s]+\s+)', original_text)
-                
                 if prefix_match:
                     prefix = prefix_match.group(1)
                     replacement = f'<CHAR>{prefix}{text}</CHAR>'
@@ -683,34 +752,102 @@ class HWPMLConverter:
                     replacement = f'<CHAR>{text}</CHAR>'
             else:
                 replacement = f'<CHAR>{text}</CHAR>'
+
+            # 텍스트 길이 변화에 따른 셀 너비 조정
+            original_len = len(original_text.strip())
+            new_len = len(text.strip())
+            
+            new_template = template
+            if new_len > original_len * 1.2:  # 새 텍스트가 20% 이상 길면 셀 너비 조정
+                # 1. 먼저 CHAR 태그의 위치 확인
+                char_pos = template.find(longest_match.group(0))
+
+                # 2. CHAR 태그 이전의 가장 가까운 CELL 태그 찾기
+                cell_start_pattern = re.compile(r'<CELL\s+[^>]*?Width="(\d+)"')
+                cell_matches = list(cell_start_pattern.finditer(template[:char_pos]))
+
+                # 모든 셀 태그 찾기 (전체 셀 너비 계산을 위해)
+                all_cell_pattern = re.compile(r'<CELL\s+[^>]*?Width="(\d+)"')
+                all_cell_matches = list(all_cell_pattern.finditer(template))
+                total_cells_width = sum(int(m.group(1)) for m in all_cell_matches)
                 
-            # 템플릿에서 해당 부분만 대체
-            new_template = template[:start] + replacement + template[end:]
+                if cell_matches:
+                    nearest_cell = cell_matches[-1]  # 가장 마지막(가장 가까운) CELL
+                    cell_width = int(nearest_cell.group(1))
+                    
+                    # 셀 인덱스 추출 시도 (콜 주소)
+                    col_addr_match = re.search(r'ColAddr="(\d+)"', template[nearest_cell.start():nearest_cell.start()+200])
+                    col_addr = int(col_addr_match.group(1)) if col_addr_match else 0
+                    
+                    # 새 너비 계산
+                    ratio = new_len / max(original_len, 1)
+                    multiplier = min(max(ratio, 1.2), 5.0)  # 최대 3배로 제한
+                    new_cell_width = int(cell_width * multiplier)
+                    width_diff = new_cell_width - cell_width
+                    
+                    # 테이블 전체 너비 계산 및 조정
+                    size_pattern = re.compile(r'<SIZE\s+[^>]*?Width="(\d+)"[^>]*?>')
+                    table_section = template[:nearest_cell.start()]
+                    size_matches = list(size_pattern.finditer(table_section))
+                    
+                    if size_matches:
+                        last_size = size_matches[-1]
+                        table_width = int(last_size.group(1))
+                        new_table_width = table_width + width_diff
+                        
+                        # 최대 테이블 너비를 초과하는 경우 조정
+                        if new_table_width > MAX_TABLE_WIDTH:
+                            # 사용 가능한 여유 공간 계산
+                            available_width = MAX_TABLE_WIDTH - (total_cells_width - cell_width)
+                            
+                            # 셀에 할당 가능한 최대 너비 계산
+                            new_cell_width = min(available_width, new_cell_width)
+                            width_diff = new_cell_width - cell_width
+                            new_table_width = table_width + width_diff
+                            
+                            # 너비가 음수가 되지 않도록 보호
+                            if new_cell_width <= 0:
+                                new_cell_width = cell_width
+                                width_diff = 0
+                                new_table_width = table_width
+                        
+                        # 셀 너비 변경
+                        if width_diff > 0:  # 너비를 늘릴 필요가 있는 경우만 변경
+                            new_template = template[:nearest_cell.start(1)] + str(new_cell_width) + template[nearest_cell.end(1):]
+                            
+                            # 테이블 너비 변경
+                            new_template = new_template[:last_size.start(1)] + str(new_table_width) + new_template[last_size.end(1):]
+                            
+                            # 템플릿이 변경되었으므로 CHAR 태그 위치 업데이트
+                            char_pos_new = new_template.find(longest_match.group(0))
+                            if char_pos_new != -1:
+                                start = char_pos_new
+                                end = start + len(longest_match.group(0))
+
+            # 내용 삽입
+            new_template = new_template[:start] + replacement + new_template[end:]
             return new_template
+
         else:
-            # <CHAR> 태그가 없으면 TEXT 태그 내의 CHAR 태그를 대상으로 처리
+            # --- CHAR 태그를 찾지 못한 경우: TEXT 태그 내의 CHAR 태그를 대상으로 처리 ---
             text_pattern = re.compile(r'<TEXT CharShape="(\d+)">(.*?)</TEXT>')
             match = text_pattern.search(template)
             if match:
                 char_shape = match.group(1)
                 original_content = match.group(2)
-                
-                # CHAR 태그 내용 추출
+                # TEXT 태그 내에 포함된 CHAR 태그 내용 추출
                 char_content_match = re.search(r'<CHAR>(.*?)</CHAR>', original_content)
                 if char_content_match and preserve_prefix:
                     original_text = char_content_match.group(1)
                     prefix_match = re.match(r'^(\s*[^\w\s]+\s+)', original_text)
-                    
                     if prefix_match:
                         prefix = prefix_match.group(1)
                         replacement = f'<TEXT CharShape="{char_shape}"><CHAR>{prefix}{text}</CHAR></TEXT>'
                         return template.replace(match.group(0), replacement, 1)
-                
                 replacement = f'<TEXT CharShape="{char_shape}"><CHAR>{text}</CHAR></TEXT>'
                 return template.replace(match.group(0), replacement, 1)
-        
-        return template
 
+        return template
     
     def _convert_list_to_hwpml(self, list_element, template_style):
         """리스트를 HWPML로 변환"""
@@ -731,16 +868,16 @@ class HWPMLConverter:
     def _process_list_item(self, item, template, char_shape, top_level_counter, is_top_level=False, counter=None):
         if counter is None:
             counter = {}
-        
+
         hwpml = ""
-        
         fragments = item['fragments']
         level = item.get('level', 0)
         is_ordered = item.get('is_ordered', False)
-        
+
         p_tag_match = re.search(r'<P\s+([^>]+)>', template)
         p_attributes = p_tag_match.group(1) if p_tag_match else 'Style="0"'
-        
+
+        # 글머리 기호 설정
         if is_ordered:
             if is_top_level:
                 prefix = f"{top_level_counter}. "
@@ -751,32 +888,37 @@ class HWPMLConverter:
                 counter[level] += 1
         else:
             prefix = f"{self.bullet_symbol} "
-        
+
         indent = "  " * level
         hwpml += f'<P {p_attributes}>'
+
+        # 글머리 기호에는 템플릿의 char_shape 사용 (리스트 스타일)
         hwpml += f'<TEXT CharShape="{char_shape}"><CHAR>{indent}{prefix}</CHAR></TEXT>'
-        
+
+        # 텍스트 내용에는 일반 단락 스타일 사용
+        p_style = self.template_styles.get('p', {})
+        text_char_shape = p_style.get('char_shape', "0")  # 일반 단락 스타일 또는 기본값 "0"
+
         for fragment in fragments:
             fragment_type = fragment['type']
             content = fragment['content']
-            
+
             if fragment_type == 'text':
-                hwpml += f'<TEXT CharShape="{char_shape}"><CHAR>{content}</CHAR></TEXT>'
+                hwpml += f'<TEXT CharShape="{text_char_shape}"><CHAR>{content}</CHAR></TEXT>'
             elif fragment_type == 'strong':
-                # 굵게: 복제된 CharShape 사용
                 hwpml += f'<TEXT CharShape="{self.special_formats["strong"]}"><CHAR>{content}</CHAR></TEXT>'
             elif fragment_type == 'em':
-                # 기울임: 복제된 CharShape 사용
                 hwpml += f'<TEXT CharShape="{self.special_formats["em"]}"><CHAR>{content}</CHAR></TEXT>'
             elif fragment_type == 'a':
+                # 하이퍼링크 처리 코드...
                 field_id = str(self.field_id_counter + 1)
                 inst_id = str(self.inst_id_counter + 1)
                 self.field_id_counter += 1
                 self.inst_id_counter += 1
-                
+
                 href = fragment.get('href', '').replace('/', '\\/')
                 command = f"{href};1;0;0;"
-                
+
                 hwpml += f'<TEXT CharShape="{self.special_formats["underline"]}">'
                 hwpml += f'<FIELDBEGIN Command="{command}" Dirty="true" Editable="false" FieldId="{field_id}" InstId="{inst_id}" Property="0" Type="Hyperlink"/>'
                 hwpml += '</TEXT>'
@@ -784,56 +926,113 @@ class HWPMLConverter:
                 hwpml += f'<TEXT CharShape="{self.special_formats["underline"]}">'
                 hwpml += f'<FIELDEND Editable="false" FieldId="{field_id}" Property="0" Type="Hyperlink"/>'
                 hwpml += '</TEXT>'
-        
+
         hwpml += '</P>'
-        
+
+        # 중첩 리스트 처리 - 기존 코드와 동일
         if 'nested_items' in item and item['nested_items']:
             nested_counter = {}
             for nested_item in item['nested_items']:
                 hwpml += self._process_list_item(nested_item, template, char_shape, top_level_counter, is_top_level=False, counter=nested_counter)
-        
+
         return hwpml
+
+    def add_table_borderfills(self):
+        """테이블용 BORDERFILL 요소를 추가하는 함수"""
+        soup = BeautifulSoup(self.template_content, 'xml')
+
+        # BORDERFILLLIST 찾기
+        borderfill_list = soup.find('BORDERFILLLIST')
+        if not borderfill_list:
+            print("BORDERFILLLIST를 찾을 수 없습니다.")
+            return False
+
+        # 기존 ID 중 가장 큰 값 찾기
+        existing_ids = [int(bf.get('Id', '0')) for bf in borderfill_list.find_all('BORDERFILL')]
+        next_id = max(existing_ids) + 1 if existing_ids else 1
+
+        # 테이블용 테두리 스타일 정의 - 유형별 순서 정정
+        table_borderfills = [
+            # 헤더용 테두리 (상하좌우 모두 실선) - ID: next_id
+            """<BORDERFILL BackSlash="0" BreakCellSeparateLine="0" CenterLine="0" CounterBackSlash="0" CounterSlash="0" CrookedSlash="0" Id="{}" Shadow="false" Slash="0" ThreeD="false">
+            <LEFTBORDER Type="Solid" Width="0.12mm"/>
+            <RIGHTBORDER Type="Solid" Width="0.12mm"/>
+            <TOPBORDER Type="Solid" Width="0.12mm"/>
+            <BOTTOMBORDER Type="Solid" Width="0.12mm"/>
+            <DIAGONAL Type="Solid" Width="0.1mm"/>
+            </BORDERFILL>""",
+
+            # 마지막 행용 테두리 (상단 점선, 하단 실선) - ID: next_id + 1
+            """<BORDERFILL BackSlash="0" BreakCellSeparateLine="0" CenterLine="0" CounterBackSlash="0" CounterSlash="0" CrookedSlash="0" Id="{}" Shadow="false" Slash="0" ThreeD="false">
+            <LEFTBORDER Type="Solid" Width="0.12mm"/>
+            <RIGHTBORDER Type="Solid" Width="0.12mm"/>
+            <TOPBORDER Type="Dot" Width="0.3mm"/>
+            <BOTTOMBORDER Type="Solid" Width="0.12mm"/>
+            <DIAGONAL Type="Solid" Width="0.1mm"/>
+            </BORDERFILL>""",
+
+            # 중간 행용 테두리 (상단 점선, 하단 점선) - ID: next_id + 2
+            """<BORDERFILL BackSlash="0" BreakCellSeparateLine="0" CenterLine="0" CounterBackSlash="0" CounterSlash="0" CrookedSlash="0" Id="{}" Shadow="false" Slash="0" ThreeD="false">
+            <LEFTBORDER Type="Solid" Width="0.12mm"/>
+            <RIGHTBORDER Type="Solid" Width="0.12mm"/>
+            <TOPBORDER Type="Dot" Width="0.3mm"/>
+            <BOTTOMBORDER Type="Dot" Width="0.3mm"/>
+            <DIAGONAL Type="Solid" Width="0.1mm"/>
+            </BORDERFILL>"""
+        ]
+
+        # 테이블 테두리 ID 저장 - 명확한 의미 부여
+        self.table_border_fills = {
+            'header': str(next_id),      # 헤더용 (상하좌우 모두 실선)
+            'footer': str(next_id + 1),  # 마지막 행용 (상단 점선, 하단 실선)
+            'body': str(next_id + 2)     # 중간 행용 (상단 실선, 하단 점선)
+        }
+
+        # BORDERFILL 요소 추가
+        for i, bf_template in enumerate(table_borderfills):
+            new_id = next_id + i
+            bf_soup = BeautifulSoup(bf_template.format(new_id), 'xml')
+            borderfill_list.append(bf_soup.find('BORDERFILL'))
+
+        # Count 속성 업데이트
+        borderfill_list['Count'] = str(len(borderfill_list.find_all('BORDERFILL')))
+
+        # 템플릿 내용 업데이트
+        self.template_content = str(soup)
+        return True
     
     def _create_default_table_hwpml(self, table_element):
         """기본 HWPML 표 생성"""
         rows = table_element['rows']
         row_count = len(rows)
         col_count = max(len(row) for row in rows) if rows else 0
-        
-        total_table_width = 41950
-        cell_width = total_table_width // col_count if col_count > 0 else 20975
-        
+
+        total_table_width = 42250
+        cell_width = total_table_width // col_count if col_count > 0 else 21125
+
         inst_id = self.inst_id_counter
         self.inst_id_counter += 1
-        
-        hwpml = f"""<P ParaShape="0" Style="0"><TEXT CharShape="0">
-<TABLE BorderFill="3" CellSpacing="0" ColCount="{col_count}" PageBreak="Cell" RepeatHeader="true" RowCount="{row_count}">
-<SHAPEOBJECT InstId="{inst_id}" Lock="false" NumberingType="Table" TextWrap="TopAndBottom" ZOrder="1">
-<SIZE Height="3846" HeightRelTo="Absolute" Protect="false" Width="{total_table_width}" WidthRelTo="Absolute"/>
-<POSITION AffectLSpacing="false" AllowOverlap="false" FlowWithText="true" HoldAnchorAndSO="false" HorzAlign="Left" HorzOffset="0" HorzRelTo="Column" TreatAsChar="false" VertAlign="Top" VertOffset="0" VertRelTo="Para"/>
-<OUTSIDEMARGIN Bottom="283" Left="283" Right="283" Top="283"/>
-</SHAPEOBJECT>
-<INSIDEMARGIN Bottom="141" Left="510" Right="510" Top="141"/>"""
-        
+
+        hwpml = f"""<P ParaShape="0" Style="0"><TEXT CharShape="0"> <TABLE BorderFill="{self.table_border_fills['header']}" CellSpacing="0" ColCount="{col_count}" PageBreak="Cell" RepeatHeader="true" RowCount="{row_count}"> <SHAPEOBJECT InstId="{inst_id}" Lock="false" NumberingType="Table" TextWrap="TopAndBottom" ZOrder="1"> <SIZE Height="3846" HeightRelTo="Absolute" Protect="false" Width="{total_table_width}" WidthRelTo="Absolute"/> <POSITION AffectLSpacing="false" AllowOverlap="false" FlowWithText="true" HoldAnchorAndSO="false" HorzAlign="Left" HorzOffset="0" HorzRelTo="Column" TreatAsChar="false" VertAlign="Top" VertOffset="0" VertRelTo="Para"/> <OUTSIDEMARGIN Bottom="283" Left="283" Right="283" Top="283"/> </SHAPEOBJECT> <INSIDEMARGIN Bottom="141" Left="510" Right="510" Top="141"/>"""
+
         for row_idx, row in enumerate(rows):
             hwpml += f"\n<ROW>"
-            border_fill_id = 3 if row_idx == 0 else (4 if row_idx == row_count - 1 else 6)
-            
+
+            # 행 위치에 따라 다른 테두리 스타일 적용
+            if row_idx == 0:  # 첫번째 행 (헤더)
+                border_fill_id = self.table_border_fills['header']
+            elif row_idx == row_count - 1:  # 마지막 행
+                border_fill_id = self.table_border_fills['footer']
+            else:  # 중간 행
+                border_fill_id = self.table_border_fills['body']
+
             for cell_idx, cell in enumerate(row):
-                hwpml += f"""
-<CELL BorderFill="{border_fill_id}" ColAddr="{cell_idx}" ColSpan="1" Dirty="false" Editable="false" HasMargin="false" Header="{str(cell.get('is_header', False)).lower()}" Height="282" Protect="false" RowAddr="{row_idx}" RowSpan="1" Width="{cell_width}">
-<CELLMARGIN Bottom="141" Left="510" Right="510" Top="141"/>
-<PARALIST LineWrap="Break" LinkListID="0" LinkListIDNext="0" TextDirection="0" VertAlign="Center">
-<P ParaShape="0" Style="0">
-<TEXT CharShape="0"><CHAR>{cell['content']}</CHAR></TEXT>
-</P>
-</PARALIST>
-</CELL>"""
-            
+                hwpml += f""" <CELL BorderFill="{border_fill_id}" ColAddr="{cell_idx}" ColSpan="1" Dirty="false" Editable="false" HasMargin="false" Header="{str(cell.get('is_header', False)).lower()}" Height="282" Protect="false" RowAddr="{row_idx}" RowSpan="1" Width="{cell_width}"> <CELLMARGIN Bottom="141" Left="510" Right="510" Top="141"/> <PARALIST LineWrap="Break" LinkListID="0" LinkListIDNext="0" TextDirection="0" VertAlign="Center"> <P ParaShape="0" Style="0"> <TEXT CharShape="0"><CHAR>{cell['content']}</CHAR></TEXT> </P> </PARALIST> </CELL>"""
+
             hwpml += f"\n</ROW>"
-        
+
         hwpml += "\n</TABLE><CHAR/></TEXT></P>"
-        
+
         return hwpml
     
     def _create_default_hwpml(self, element):
@@ -853,6 +1052,112 @@ class HWPMLConverter:
             char_shape = "0"
         
         return f'<P ParaShape="{para_shape}" Style="0"><TEXT CharShape="{char_shape}"><CHAR>{content}</CHAR></TEXT></P>'
+
+    def _identify_special_char(self, char):
+        """특수 문자가 어떤 유형인지 식별하고 정보 반환"""
+        code_point = ord(char)
+        
+        for char_type, info in self.special_char_maps.items():
+            start, end = info['range']
+            if start <= code_point <= end:
+                # 특수 문자의 현재 값(숫자나 알파벳 순서) 계산
+                if char_type in ['circled_uppercase', 'circled_lowercase']:
+                    value = chr(code_point - start + info['base_value'])
+                else:
+                    value = code_point - start + info['base_value']
+                return {
+                    'type': char_type,
+                    'value': value,
+                    'code_point': code_point,
+                    'info': info
+                }
+        
+        return None
+    
+    def _increment_special_char(self, char, template_type):
+        """특수 문자를 식별하고 증가된 값의 문자 반환"""
+        special_char_info = self._identify_special_char(char)
+        if not special_char_info:
+            return char  # 특수 문자가 아니면 그대로 반환
+        
+        char_type = special_char_info['type']
+        
+        # 해당 템플릿 타입에 대한 카운터 가져오기
+        if template_type not in self.special_char_counters:
+            self.special_char_counters[template_type] = {}
+        
+        type_counters = self.special_char_counters[template_type]
+        
+        # 해당 특수 문자 타입의 카운터 가져오기 또는 초기화
+        if char_type not in type_counters:
+            # 최초 발견 시 현재 값으로 설정 (1부터 시작)
+            type_counters[char_type] = 1
+        else:
+            # 이미 카운터가 있으면 증가
+            type_counters[char_type] += 1
+        
+        # 최대값 확인
+        max_count = special_char_info['info']['max_count']
+        if type_counters[char_type] > max_count:
+            type_counters[char_type] = 1  # 최대값 초과 시 1로 리셋
+        
+        # 증가된 값에 해당하는 유니코드 문자 반환
+        start, _ = special_char_info['info']['range']
+        next_value = type_counters[char_type]
+        
+        if char_type in ['circled_uppercase', 'circled_lowercase']:
+            # 알파벳의 경우 기준 문자(A/a)에서 얼마나 떨어져 있는지 계산
+            base_value = special_char_info['info']['base_value']
+            offset = next_value - 1  # 1부터 시작하므로 1을 빼줌
+            next_code_point = start + offset
+        else:
+            # 숫자의 경우 base_value(대부분 1)에서 얼마나 떨어져 있는지 계산
+            base_value = special_char_info['info']['base_value']
+            offset = next_value - 1  # 1부터 시작하므로 1을 빼줌
+            next_code_point = start + offset
+        
+        return chr(next_code_point)
+    
+    def _process_special_chars_in_template(self, template, template_type, text):
+        """템플릿 내의 특수 문자를 처리하여 자동 증가시킴"""
+        import re
+        
+        # 모든 <CHAR>...</CHAR> 태그 찾기
+        char_pattern = re.compile(r'<CHAR>(.*?)</CHAR>')
+        matches = list(char_pattern.finditer(template))
+        
+        if not matches:
+            return template
+        
+        # 각 매치에 대해 특수 문자 증가 적용
+        new_template = template
+        offset = 0  # 문자열 길이 변화에 따른 오프셋
+        
+        for match in matches:
+            start, end = match.span()
+            start += offset
+            end += offset
+            original_content = match.group(1)
+            
+            # 텍스트가 삽입될 위치인 가장 긴 CHAR 태그 건너뛰기
+            if match == max(matches, key=lambda m: len(m.group(1))):
+                continue
+            
+            # 특수 문자 찾기 및 처리
+            new_content = original_content
+            for i, char in enumerate(original_content):
+                special_char_info = self._identify_special_char(char)
+                if special_char_info:
+                    next_char = self._increment_special_char(char, template_type)
+                    new_content = new_content[:i] + next_char + new_content[i+1:]
+            
+            # 내용에 변경이 있으면 교체
+            if new_content != original_content:
+                replacement = f'<CHAR>{new_content}</CHAR>'
+                new_template = new_template[:start] + replacement + new_template[end:]
+                offset += len(replacement) - (end - start)
+        
+        return new_template
 
 
 class MainWindow(QMainWindow):
@@ -880,7 +1185,8 @@ class MainWindow(QMainWindow):
             os.makedirs(output_dir)
         
         # 기본 출력 파일 경로 설정
-        self.output_path = os.path.join(output_dir, "converted.hml")
+        self.output_dir = output_dir
+        self.output_path = None  # output_path 초기화
         
         self.layout = QVBoxLayout(self.central_widget)
         
@@ -938,9 +1244,9 @@ class MainWindow(QMainWindow):
             self.status_bar.showMessage("오류: 먼저 템플릿을 선택하세요")
             return
         
-        if not self.output_path:
-            self.status_bar.showMessage("오류: 출력 경로를 선택하세요")
-            return
+        # 매번 새로운 타임스탬프로 파일명 생성
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        self.output_path = os.path.join(self.output_dir, f"converted_{timestamp}.hml")
         
         md_text = self.text_edit.toPlainText()
         if not md_text:
@@ -973,6 +1279,12 @@ class MainWindow(QMainWindow):
                 f.write(hwpml_content)
             
             self.status_bar.showMessage(f"변환 완료: {self.output_path}")
+            
+            # 변환 완료 후 파일 자동 실행
+            try:
+                os.startfile(self.output_path)
+            except Exception as e:
+                self.status_bar.showMessage(f"파일을 자동으로 열지 못했습니다: {str(e)}")
         except Exception as e:
             self.status_bar.showMessage(f"변환 중 오류 발생: {str(e)}")
 
