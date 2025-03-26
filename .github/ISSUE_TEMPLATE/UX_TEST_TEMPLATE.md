@@ -1,7 +1,7 @@
 ---
 name: UX 테스트 템플릿
 about: UX 테스트 작업에 대한 이슈 템플릿입니다.
-title: "UX 테스트"
+title: "UX 테스트: "
 labels: "UX 테스트"
 assignees:
 
