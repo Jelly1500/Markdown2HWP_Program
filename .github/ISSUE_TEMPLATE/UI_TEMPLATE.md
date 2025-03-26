@@ -1,7 +1,7 @@
 ---
 name: UI 이슈 템플릿
 about: 데스크탑 앱 UI 관련 이슈 명확화를 위한 템플릿입니다.
-title: "UI 개선: [여기에 개선 사항을 간략히 작성하세요]"
+title: "UI 개선: "
 labels: "🎨 UI/UX"
 assignees:
 ---
