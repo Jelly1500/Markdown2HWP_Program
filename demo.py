@@ -971,7 +971,7 @@ class HWPMLConverter:
             <DIAGONAL Type="Solid" Width="0.1mm"/>
             </BORDERFILL>""",
 
-            # 중간 행용 테두리 (상단 실선, 하단 점선) - ID: next_id + 2
+            # 중간 행용 테두리 (상단 점선, 하단 점선) - ID: next_id + 2
             """<BORDERFILL BackSlash="0" BreakCellSeparateLine="0" CenterLine="0" CounterBackSlash="0" CounterSlash="0" CrookedSlash="0" Id="{}" Shadow="false" Slash="0" ThreeD="false">
             <LEFTBORDER Type="Solid" Width="0.12mm"/>
             <RIGHTBORDER Type="Solid" Width="0.12mm"/>
