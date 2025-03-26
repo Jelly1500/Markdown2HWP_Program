@@ -1,7 +1,7 @@
 ---
 name: 문서 작업 이슈 템플릿
 about: 문서(주간 보고서, 일정 관리, 사용법 등) 작성 및 관리 관련 템플릿입니다.
-title: "문서화 개선: [여기에 문서 변경 내용을 간략히 작성하세요]"
+title: "문서화 개선: "
 labels: "📚 Documentation"
 assignees:
 
