@@ -1,7 +1,7 @@
 ---
 name: 피드백 이슈 템플릿
 about: 피드백 내용을 정리 및 필요 기능을 추출하는 작업 관련 템플릿입니다.
-title: "피드백 내용 정리: [여기에 피드백 내용을 간략히 작성하세요]"
+title: "피드백 내용 정리: "
 labels: "📚 Documentation"
 assignees:
 
