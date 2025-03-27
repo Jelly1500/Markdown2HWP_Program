@@ -1,0 +1,123 @@
+"""
+특수 문자 처리 및 자동 증가 담당 모듈
+"""
+import re
+from ..config import SPECIAL_CHAR_MAPS
+
+class SpecialCharHandler:
+    """특수 문자 처리 및 자동 증가 담당 클래스"""
+    
+    def __init__(self):
+        # 특수 문자 증가를 위한 카운터 저장
+        self.special_char_counters = {}
+        
+        # 특수 문자 유니코드 매핑
+        self.special_char_maps = SPECIAL_CHAR_MAPS
+    
+    def identify_special_char(self, char):
+        """특수 문자가 어떤 유형인지 식별하고 정보 반환"""
+        code_point = ord(char)
+        
+        for char_type, info in self.special_char_maps.items():
+            start, end = info['range']
+            if start <= code_point <= end:
+                # 특수 문자의 현재 값(숫자나 알파벳 순서) 계산
+                if char_type in ['circled_uppercase', 'circled_lowercase']:
+                    value = chr(code_point - start + info['base_value'])
+                else:
+                    value = code_point - start + info['base_value']
+                return {
+                    'type': char_type,
+                    'value': value,
+                    'code_point': code_point,
+                    'info': info
+                }
+        
+        return None
+    
+    def increment_special_char(self, char, template_type):
+        """특수 문자를 식별하고 증가된 값의 문자 반환"""
+        special_char_info = self.identify_special_char(char)
+        if not special_char_info:
+            return char  # 특수 문자가 아니면 그대로 반환
+        
+        char_type = special_char_info['type']
+        
+        # 해당 템플릿 타입에 대한 카운터 가져오기
+        if template_type not in self.special_char_counters:
+            self.special_char_counters[template_type] = {}
+        
+        type_counters = self.special_char_counters[template_type]
+        
+        # 해당 특수 문자 타입의 카운터 가져오기 또는 초기화
+        if char_type not in type_counters:
+            # 최초 발견 시 현재 값으로 설정 (1부터 시작)
+            type_counters[char_type] = 1
+        else:
+            # 이미 카운터가 있으면 증가
+            type_counters[char_type] += 1
+        
+        # 최대값 확인
+        max_count = special_char_info['info']['max_count']
+        if type_counters[char_type] > max_count:
+            type_counters[char_type] = 1  # 최대값 초과 시 1로 리셋
+        
+        # 증가된 값에 해당하는 유니코드 문자 반환
+        start, _ = special_char_info['info']['range']
+        next_value = type_counters[char_type]
+        
+        if char_type in ['circled_uppercase', 'circled_lowercase']:
+            # 알파벳의 경우 기준 문자(A/a)에서 얼마나 떨어져 있는지 계산
+            base_value = special_char_info['info']['base_value']
+            offset = next_value - 1  # 1부터 시작하므로 1을 빼줌
+            next_code_point = start + offset
+        else:
+            # 숫자의 경우 base_value(대부분 1)에서 얼마나 떨어져 있는지 계산
+            base_value = special_char_info['info']['base_value']
+            offset = next_value - 1  # 1부터 시작하므로 1을 빼줌
+            next_code_point = start + offset
+        
+        return chr(next_code_point)
+    
+    def process_special_chars_in_template(self, template, template_type, text):
+        """템플릿 내의 특수 문자를 처리하여 자동 증가시킴"""
+        # 모든 <CHAR>...</CHAR> 태그 찾기
+        char_pattern = re.compile(r'<CHAR>(.*?)</CHAR>')
+        matches = list(char_pattern.finditer(template))
+        
+        if not matches:
+            return template
+        
+        # 각 매치에 대해 특수 문자 증가 적용
+        new_template = template
+        offset = 0  # 문자열 길이 변화에 따른 오프셋
+        
+        for match in matches:
+            start, end = match.span()
+            start += offset
+            end += offset
+            original_content = match.group(1)
+            
+            # 텍스트가 삽입될 위치인 가장 긴 CHAR 태그 건너뛰기
+            if match == max(matches, key=lambda m: len(m.group(1))):
+                continue
+            
+            # 특수 문자 찾기 및 처리
+            new_content = original_content
+            for i, char in enumerate(original_content):
+                special_char_info = self.identify_special_char(char)
+                if special_char_info:
+                    next_char = self.increment_special_char(char, template_type)
+                    new_content = new_content[:i] + next_char + new_content[i+1:]
+            
+            # 내용에 변경이 있으면 교체
+            if new_content != original_content:
+                replacement = f'<CHAR>{new_content}</CHAR>'
+                new_template = new_template[:start] + replacement + new_template[end:]
+                offset += len(replacement) - (end - start)
+        
+        return new_template
+    
+    def reset_counters(self):
+        """특수 문자 카운터 초기화"""
+        self.special_char_counters = {} 
