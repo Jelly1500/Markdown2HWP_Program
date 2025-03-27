@@ -1,12 +1,14 @@
 # md2hwp/gui/main_window.py
 
 import os
+import io
 import datetime
 from PySide6.QtWidgets import (QMainWindow, QTextEdit, QPushButton, QFileDialog,
-                              QVBoxLayout, QHBoxLayout, QWidget, QStatusBar, QApplication)
+                              QVBoxLayout, QHBoxLayout, QWidget, QStatusBar, QApplication,
+                              QLabel)
+from PySide6.QtCore import Qt, QEvent
 from .status_handler import StatusHandler
 from ..config import OUTPUT_DIR_NAME, DEFAULT_ENCODING
-# generate_output_filename 함수 임포트 확인
 from ..utils.file_utils import ensure_directory, generate_output_filename, save_text_file, open_file
 
 class MainWindow(QMainWindow):
@@ -20,14 +22,10 @@ class MainWindow(QMainWindow):
 
         self.converter = converter
         self.template_path = ""
-        self.output_path = None # 초기 출력 경로는 없음
-        # --- 사용자가 출력 경로를 직접 선택했는지 여부 플래그 추가 ---
+        self.output_path = None
         self.user_selected_output_path = False
 
-        # 현재 스크립트의 위치를 기준으로 상대 경로 설정 (이 부분은 setup_ui로 이동 가능)
-        # current_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        # self.output_dir = os.path.join(current_dir, OUTPUT_DIR_NAME)
-        # ensure_directory(self.output_dir)
+        self.overlay_widget = None
 
         self.setup_ui()
 
@@ -35,19 +33,22 @@ class MainWindow(QMainWindow):
         """UI 구성 요소 설정"""
         self.central_widget = QWidget()
         self.setCentralWidget(self.central_widget)
+        self.central_widget.setAcceptDrops(True)
 
-        # --- output_dir 설정 __init__ 에서 setup_ui 로 이동 ---
+        # 출력 디렉토리 설정
         current_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        self.output_dir = os.path.join(current_dir, OUTPUT_DIR_NAME)
+        self.output_dir = os.path.join(os.path.dirname(current_dir), OUTPUT_DIR_NAME)
         ensure_directory(self.output_dir)
-        # ---
 
+        # 레이아웃 구성
         self.layout = QVBoxLayout(self.central_widget)
 
         self.text_edit = QTextEdit()
-        self.text_edit.setPlaceholderText("여기에 마크다운 텍스트를 붙여넣거나 클립보드에서 불러오세요")
+        self.text_edit.setPlaceholderText("여기에 마크다운 텍스트를 붙여넣거나 .md 파일을 드롭하세요")
+        self.text_edit.setAcceptDrops(True)
         self.layout.addWidget(self.text_edit)
 
+        # 버튼 레이아웃 구성
         self.button_layout = QHBoxLayout()
 
         self.template_button = QPushButton("템플릿 선택")
@@ -62,25 +63,122 @@ class MainWindow(QMainWindow):
 
         self.layout.addLayout(self.button_layout)
 
+        # 상태바 설정
         self.status_bar = QStatusBar()
         self.setStatusBar(self.status_bar)
         self.status_handler = StatusHandler(self.status_bar)
         self.status_handler.reset()
 
+        # 버튼 이벤트 연결
         self.template_button.clicked.connect(self.select_template)
         self.clipboard_button.clicked.connect(self.load_from_clipboard)
         self.save_button.clicked.connect(self.select_output_path)
         self.convert_button.clicked.connect(self.convert)
 
+        # 드래그 앤 드롭 설정
+        self.setAcceptDrops(True)
+
+        # 오버레이 위젯 설정
+        self.overlay_widget = QLabel("여기에 파일을 드롭하세요\n(.md 또는 .hml)", self)
+        self.overlay_widget.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.overlay_widget.setStyleSheet("""
+            QLabel {
+                background-color: rgba(0, 0, 0, 0.7);
+                color: white;
+                font-size: 20px;
+                font-weight: bold;
+                border: 3px dashed white;
+            }
+        """)
+        self.overlay_widget.hide()
+        self.overlay_widget.raise_()
+
+    def resizeEvent(self, event):
+        """창 크기가 변경될 때 오버레이 위젯 크기 조절"""
+        super().resizeEvent(event)
+        if self.overlay_widget:
+            status_bar_height = self.status_bar.height() if self.status_bar else 0
+            overlay_height = self.height() - status_bar_height
+            self.overlay_widget.setGeometry(0, 0, self.width(), overlay_height)
+
+    # 드래그 앤 드롭 관련 이벤트 핸들러
+    def dragEnterEvent(self, event):
+        """드래그된 항목이 창 영역에 들어왔을 때"""
+        if event.mimeData().hasUrls():
+            urls = event.mimeData().urls()
+            valid_file_found = False
+            for url in urls:
+                file_path = url.toLocalFile()
+                if os.path.isfile(file_path):
+                    _, extension = os.path.splitext(file_path)
+                    if extension.lower() in ['.md', '.hml']:
+                        valid_file_found = True
+                        break
+
+            if valid_file_found:
+                event.acceptProposedAction()
+                self.overlay_widget.show()
+                self.overlay_widget.raise_()
+            else:
+                event.ignore()
+        else:
+            event.ignore()
+
+    def dragLeaveEvent(self, event):
+        """드래그 중 창 영역을 벗어났을 때 오버레이 숨김"""
+        self.overlay_widget.hide()
+        event.accept()
+
+    def dropEvent(self, event):
+        """드롭 이벤트 처리"""
+        self.overlay_widget.hide()
+
+        urls = event.mimeData().urls()
+        if urls:
+            file_path = urls[0].toLocalFile()
+
+            if os.path.isfile(file_path):
+                _, extension = os.path.splitext(file_path)
+                extension = extension.lower()
+
+                if extension == ".md":
+                    try:
+                        with io.open(file_path, "r", encoding=DEFAULT_ENCODING) as f:
+                            md_content = f.read()
+                        self.text_edit.setPlainText(md_content)
+                        self.status_handler.set_success(f"마크다운 파일 로드 완료: {os.path.basename(file_path)}")
+                        event.acceptProposedAction()
+                    except Exception as e:
+                        self.status_handler.set_error(f"마크다운 파일 읽기 오류: {e}")
+                        event.ignore()
+
+                elif extension == ".hml":
+                    self.template_path = file_path
+                    success = self.converter.load_template(file_path)
+                    if success:
+                        self.status_handler.set_success(f"템플릿 로드 완료: {os.path.basename(file_path)}")
+                        event.acceptProposedAction()
+                    else:
+                        self.status_handler.set_error("템플릿 로드 오류")
+                        event.ignore()
+                else:
+                    self.status_handler.set_error(f"지원하지 않는 파일 형식입니다: {extension}")
+                    event.ignore()
+            else:
+                event.ignore()
+        else:
+            event.ignore()
+
+    # 파일 및 변환 관련 메서드
     def select_template(self):
         """템플릿 파일 선택 대화상자 표시"""
-        file_path, _ = QFileDialog.getOpenFileName(self, "템플릿 파일 선택", "", "HWP 파일 (*.hml)")
+        template_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'templates')
+        if not os.path.exists(template_dir):
+             template_dir = ""
+
+        file_path, _ = QFileDialog.getOpenFileName(self, "템플릿 파일 선택", template_dir, "HWP 템플릿 파일 (*.hml)")
         if file_path:
             self.template_path = file_path
-            # --- 템플릿 변경 시, 사용자 지정 출력 경로 유지 여부 결정 필요 ---
-            # 여기서는 일단 유지하는 것으로 가정
-            # self.user_selected_output_path = False # 필요시 주석 해제
-            # self.output_path = None              # 필요시 주석 해제
             success = self.converter.load_template(file_path)
             if success:
                 self.status_handler.set_success(f"템플릿 로드 완료: {os.path.basename(file_path)}")
@@ -99,12 +197,15 @@ class MainWindow(QMainWindow):
 
     def select_output_path(self):
         """출력 파일 경로 선택"""
-        # 현재 output_path 가 있으면 기본 경로로 제안, 없으면 output_dir 사용
-        default_path = self.output_path if self.output_path else self.output_dir
+        default_dir = os.path.dirname(self.output_path) if self.output_path else self.output_dir
+        default_filename = os.path.basename(self.output_path) if self.output_path else "converted.hml"
+        default_path = os.path.join(default_dir, default_filename)
+
         file_path, _ = QFileDialog.getSaveFileName(self, "HWP 파일 저장", default_path, "HWP 파일 (*.hml)")
         if file_path:
+            if not file_path.lower().endswith('.hml'):
+                file_path += '.hml'
             self.output_path = file_path
-            # --- 사용자가 경로를 직접 선택했음을 표시 ---
             self.user_selected_output_path = True
             self.status_handler.set_message(f"출력 경로 설정: {file_path}")
 
@@ -119,33 +220,35 @@ class MainWindow(QMainWindow):
             self.status_handler.set_error("변환할 텍스트가 없습니다")
             return
 
-        # --- 출력 경로 결정 로직 수정 ---
+        # 출력 경로 결정
         if self.user_selected_output_path and self.output_path:
-            # 사용자가 직접 경로를 선택한 경우 해당 경로 사용
             current_output_path = self.output_path
+            current_output_dir = os.path.dirname(current_output_path)
         else:
-            # 사용자가 경로를 선택하지 않은 경우, 변환 시점마다 새 타임스탬프 경로 생성
-            current_output_path = generate_output_filename(self.output_dir)
-            # 필요하다면 self.output_path 도 업데이트 할 수 있으나, 다음 변환 시 어차피 새로 생성될 것이므로 필수는 아님
-            # self.output_path = current_output_path
-        # ---
+            current_output_dir = self.output_dir
+            current_output_path = generate_output_filename(current_output_dir)
+
+        ensure_directory(current_output_dir)
 
         self.status_handler.set_message("변환 중...")
+        QApplication.processEvents()
 
         try:
-            # convert_md_to_hwpml 호출 시 메타데이터는 내부에서 처리됨
             hwpml_content = self.converter.convert_md_to_hwpml(md_text)
-
-            # 결정된 현재 출력 경로(current_output_path)에 저장
             save_text_file(current_output_path, hwpml_content, encoding=DEFAULT_ENCODING)
-
             self.status_handler.set_success(f"변환 완료: {current_output_path}")
 
-            # 변환 완료 후 파일 자동 실행
-            if not open_file(current_output_path):
-                self.status_handler.set_error("파일을 자동으로 열지 못했습니다")
+            # 파일 자동 실행 시도
+            if open_file(current_output_path):
+                pass
+            else:
+                try:
+                    os.startfile(current_output_dir)
+                    self.status_handler.set_message(f"파일 열기 실패. 저장 폴더를 열었습니다: {current_output_dir}")
+                except Exception as folder_err:
+                    self.status_handler.set_error(f"파일/폴더 자동 열기 실패: {folder_err}")
+
         except Exception as e:
-            # 오류 발생 시 상세 정보 포함하여 표시
             import traceback
-            traceback.print_exc() # 콘솔에 상세 오류 출력
+            traceback.print_exc()
             self.status_handler.set_error(f"변환 중 오류 발생: {str(e)}")
