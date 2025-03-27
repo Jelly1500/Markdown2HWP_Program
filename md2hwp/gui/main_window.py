@@ -3,11 +3,12 @@
 import os
 import datetime
 from PySide6.QtWidgets import (QMainWindow, QTextEdit, QPushButton, QFileDialog,
-                              QVBoxLayout, QHBoxLayout, QWidget, QStatusBar, QApplication)
+                              QVBoxLayout, QHBoxLayout, QWidget, QStatusBar, QApplication,
+                              QMenu)
 from .status_handler import StatusHandler
 from ..config import OUTPUT_DIR_NAME, DEFAULT_ENCODING
 # generate_output_filename 함수 임포트 확인
-from ..utils.file_utils import ensure_directory, generate_output_filename, save_text_file, open_file
+from ..utils.file_utils import ensure_directory, generate_output_filename, save_text_file, open_file, open_file_explorer
 
 class MainWindow(QMainWindow):
     """GUI 메인 창 클래스"""
@@ -52,12 +53,19 @@ class MainWindow(QMainWindow):
 
         self.template_button = QPushButton("템플릿 선택")
         self.clipboard_button = QPushButton("클립보드에서 불러오기")
-        self.save_button = QPushButton("출력 경로 선택")
+        
+        # file_explore 버튼과 메뉴 설정
+        self.file_explore = QPushButton("파일 위치 보기")
+        self.file_explore_menu = QMenu()
+        self.show_output_action = self.file_explore_menu.addAction("한글 파일 위치 보기")
+        self.show_template_action = self.file_explore_menu.addAction("템플릿 위치 보기")
+        self.file_explore.setMenu(self.file_explore_menu)
+        
         self.convert_button = QPushButton("변환")
 
         self.button_layout.addWidget(self.template_button)
         self.button_layout.addWidget(self.clipboard_button)
-        self.button_layout.addWidget(self.save_button)
+        self.button_layout.addWidget(self.file_explore)
         self.button_layout.addWidget(self.convert_button)
 
         self.layout.addLayout(self.button_layout)
@@ -69,7 +77,8 @@ class MainWindow(QMainWindow):
 
         self.template_button.clicked.connect(self.select_template)
         self.clipboard_button.clicked.connect(self.load_from_clipboard)
-        self.save_button.clicked.connect(self.select_output_path)
+        self.show_output_action.triggered.connect(self.show_output_location)
+        self.show_template_action.triggered.connect(self.show_template_location)
         self.convert_button.clicked.connect(self.convert)
 
     def select_template(self):
@@ -97,16 +106,25 @@ class MainWindow(QMainWindow):
         else:
             self.status_handler.set_error("클립보드에 텍스트 없음")
 
-    def select_output_path(self):
-        """출력 파일 경로 선택"""
-        # 현재 output_path 가 있으면 기본 경로로 제안, 없으면 output_dir 사용
-        default_path = self.output_path if self.output_path else self.output_dir
-        file_path, _ = QFileDialog.getSaveFileName(self, "HWP 파일 저장", default_path, "HWP 파일 (*.hml)")
-        if file_path:
-            self.output_path = file_path
-            # --- 사용자가 경로를 직접 선택했음을 표시 ---
-            self.user_selected_output_path = True
-            self.status_handler.set_message(f"출력 경로 설정: {file_path}")
+    def show_output_location(self):
+        """한글 파일 위치를 파일 탐색기에서 보여줌"""
+        if self.output_path:
+            try:
+                open_file_explorer(self.output_path, handle_type='output')
+            except Exception as e:
+                self.status_handler.set_error(f"파일 탐색기 열기 실패: {str(e)}")
+        else:
+            self.status_handler.set_error("아직 변환된 파일이 없습니다")
+
+    def show_template_location(self):
+        """템플릿 파일 위치를 파일 탐색기에서 보여줌"""
+        if self.template_path:
+            try:
+                open_file_explorer(self.template_path, handle_type='template')
+            except Exception as e:
+                self.status_handler.set_error(f"파일 탐색기 열기 실패: {str(e)}")
+        else:
+            self.status_handler.set_error("먼저 템플릿을 선택하세요")
 
     def convert(self):
         """마크다운을 HWPML로 변환하여 저장"""
@@ -126,6 +144,7 @@ class MainWindow(QMainWindow):
         else:
             # 사용자가 경로를 선택하지 않은 경우, 변환 시점마다 새 타임스탬프 경로 생성
             current_output_path = generate_output_filename(self.output_dir)
+            self.output_path = current_output_path
             # 필요하다면 self.output_path 도 업데이트 할 수 있으나, 다음 변환 시 어차피 새로 생성될 것이므로 필수는 아님
             # self.output_path = current_output_path
         # ---
@@ -144,6 +163,7 @@ class MainWindow(QMainWindow):
             # 변환 완료 후 파일 자동 실행
             if not open_file(current_output_path):
                 self.status_handler.set_error("파일을 자동으로 열지 못했습니다")
+                
         except Exception as e:
             # 오류 발생 시 상세 정보 포함하여 표시
             import traceback
