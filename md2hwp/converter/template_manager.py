@@ -279,7 +279,6 @@ class TemplateManager:
         existing_ids = [int(bf.get('Id', '0')) for bf in borderfill_list.find_all('BORDERFILL')]
         next_id = max(existing_ids) + 1 if existing_ids else 1
         
-        print(f"테이블 테두리 추가: 다음 ID는 {next_id}부터 시작")
 
         # 테이블용 테두리 스타일 정의 - 유형별 순서 정정
         table_borderfills = [
@@ -329,5 +328,4 @@ class TemplateManager:
 
         # 템플릿 내용 업데이트
         self.template_content = str(soup)
-        print(f"테이블 테두리 추가 완료: header={self.table_border_fills['header']}, footer={self.table_border_fills['footer']}, body={self.table_border_fills['body']}")
         return True 
