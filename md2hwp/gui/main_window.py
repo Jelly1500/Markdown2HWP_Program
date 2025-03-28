@@ -170,6 +170,18 @@ QWidget#SubHeadingButtonContainer {
 }
 """
 
+def get_base_path():
+    """ 실행 환경에 따라 기본 경로를 반환 (빌드된 .exe 또는 소스코드) """
+    if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+        # PyInstaller 등으로 빌드된 경우 (.exe)
+        # sys.executable은 .exe 파일의 *절대 경로*입니다.
+        return os.path.dirname(sys.executable)
+    else:
+        # 일반 파이썬 환경에서 실행된 경우 (소스코드)
+        # 현재 파일(main_window.py) 기준 상위-상위 폴더를 기준으로 설정
+        return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+BASE_PATH = get_base_path()
 class MainWindow(QMainWindow):
     """GUI 메인 창 클래스 (헤딩 변경 기능 추가)"""
 
@@ -183,17 +195,11 @@ class MainWindow(QMainWindow):
 
         # --- 기본 폴더 및 템플릿 경로 설정 ---
         try:
-            current_file_path = os.path.abspath(__file__)
-            gui_dir = os.path.dirname(current_file_path)
-            app_dir = os.path.dirname(gui_dir)
-            project_root = os.path.dirname(app_dir)
-
-            self.default_output_dir = os.path.join(project_root, "convertedDocs")
-            self.default_template_dir = os.path.join(project_root, "new_template")
-            self.default_template_file = os.path.join(self.default_template_dir, "템플릿문서.hml") # 기본 템플릿 파일
+            self.default_output_dir = os.path.join(BASE_PATH, "convertedDocs")
+            self.default_template_dir = os.path.join(BASE_PATH, "new_template") # 폴더 이름 수정 (template -> new_template)
+            self.default_template_file = os.path.join(self.default_template_dir, "템플릿문서.hml")
 
             ensure_directory(self.default_output_dir)
-            ensure_directory(self.default_template_dir)
         except Exception as e:
             print(f"경고: 기본 폴더 경로 설정 중 오류 발생 - {e}")
             self.default_output_dir = ensure_directory(os.path.abspath("convertedDocs"))

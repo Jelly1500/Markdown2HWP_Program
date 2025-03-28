@@ -2,7 +2,7 @@
 특수 문자 처리 및 자동 증가 담당 모듈
 """
 import re
-from ..config import SPECIAL_CHAR_MAPS
+from md2hwp.config import SPECIAL_CHAR_MAPS
 
 class SpecialCharHandler:
     """특수 문자 처리 및 자동 증가 담당 클래스"""

@@ -4,13 +4,13 @@
 import sys
 from PySide6.QtWidgets import QApplication
 
-from .converter.markdown_parser import MarkdownParser
-from .converter.template_manager import TemplateManager
-from .converter.special_char import SpecialCharHandler
-from .converter.hwpml_generator import HWPMLGenerator
-from .converter.id_manager import IDManager
-from .gui.main_window import MainWindow
-from .config import APP_NAME
+from md2hwp.converter.markdown_parser import MarkdownParser
+from md2hwp.converter.template_manager import TemplateManager
+from md2hwp.converter.special_char import SpecialCharHandler
+from md2hwp.converter.hwpml_generator import HWPMLGenerator
+from md2hwp.converter.id_manager import IDManager
+from md2hwp.gui.main_window import MainWindow
+from md2hwp.config import APP_NAME
 
 class MD2HWPConverter:
     """마크다운-HWP 변환 메인 클래스"""

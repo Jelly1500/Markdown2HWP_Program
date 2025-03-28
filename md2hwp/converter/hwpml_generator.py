@@ -2,8 +2,8 @@
 마크다운 요소를 HWPML로 변환하는 모듈
 """
 import re
-from .table_generator import TableGenerator
-from ..utils.xml_utils import replace_section_content
+from md2hwp.converter.table_generator import TableGenerator
+from md2hwp.utils.xml_utils import replace_section_content
 
 class HWPMLGenerator:
     """마크다운 요소를 HWPML로 변환하는 클래스"""
@@ -143,7 +143,7 @@ class HWPMLGenerator:
             new_template = template
             if new_len > original_len * 1.2:  # 새 텍스트가 20% 이상 길면 셀 너비 조정
                 # 셀 너비 조정 로직 - 이 부분은 복잡하므로 기존 코드를 유지하되 클래스 변수 사용
-                from ..config import MAX_TABLE_WIDTH  # 필요한 경우에만 임포트
+                from md2hwp.config import MAX_TABLE_WIDTH  # 필요한 경우에만 임포트
 
                 # 1. 먼저 CHAR 태그의 위치 확인
                 char_pos = template.find(longest_match.group(0))
