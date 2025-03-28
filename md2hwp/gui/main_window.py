@@ -158,17 +158,20 @@ class MainWindow(QMainWindow):
 
             self.default_output_dir = os.path.join(project_root, "convertedDocs")
             self.default_template_dir = os.path.join(project_root, "new_template")
-
+            self.default_template_file = os.path.join(self.default_template_dir, "템플릿문서.hml")
+            
             ensure_directory(self.default_output_dir)
             ensure_directory(self.default_template_dir)
         except Exception as e:
             print(f"경고: 기본 폴더 경로 설정 중 오류 발생 - {e}")
             self.default_output_dir = ensure_directory(os.path.abspath("convertedDocs"))
             self.default_template_dir = ensure_directory(os.path.abspath("new_template"))
-
+            self.default_template_file = os.path.join(self.default_template_dir, "템플릿문서.hml")
+            
         # UI 설정 및 스타일 적용
         self.setup_ui()
         self.apply_styles()
+        self.load_default_template()
 
     def setup_ui(self):
         self.setWindowTitle(f"{APP_NAME} v1.0")
@@ -431,7 +434,25 @@ class MainWindow(QMainWindow):
         except Exception as e:
             self.status_handler.set_error(f"파일 탐색기 열기 실패: {str(e)}")
 
-    
+    # --- 기본 템플릿 로드 메서드 ---  <- 추가된 메서드
+    def load_default_template(self):
+        """프로그램 시작 시 기본 템플릿을 로드합니다."""
+        if os.path.exists(self.default_template_file):
+            success = self.converter.load_template(self.default_template_file)
+            if success:
+                self.template_path = self.default_template_file
+                self.template_label.setText(f"템플릿: {os.path.basename(self.default_template_file)}")
+                self.status_handler.set_message(f"기본 템플릿 '{os.path.basename(self.default_template_file)}' 로드 완료", 3000)
+            else:
+                self.template_path = ""
+                self.template_label.setText("템플릿: 기본 로드 실패")
+                self.status_handler.set_error("기본 템플릿 로드 중 오류 발생. 수동으로 선택해주세요.")
+        else:
+            self.template_path = "" 
+            self.template_label.setText("템플릿: 선택되지 않음") # "기본 없음" 대신 더 명확하게
+            self.status_handler.set_warning("기본 템플릿 파일을 찾을 수 없습니다. '템플릿 선택' 버튼을 이용하세요.")
+
+
     def convert(self):
         """마크다운을 HWPML로 변환하여 기본 출력 폴더에 저장"""
         if self.is_converting: return
