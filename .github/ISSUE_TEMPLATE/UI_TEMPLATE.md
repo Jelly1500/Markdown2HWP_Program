@@ -2,7 +2,7 @@
 name: UI 이슈 템플릿
 about: 데스크탑 앱 UI 관련 이슈 명확화를 위한 템플릿입니다.
 title: "UI 개선: "
-labels: "🎨 UI/UX"
+labels: "UI"
 assignees:
 ---
 
