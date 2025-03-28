@@ -1,7 +1,7 @@
 """
 HWPML 표 생성 전담 모듈
 """
-from ..config import MAX_TABLE_WIDTH, DEFAULT_CELL_WIDTH
+from md2hwp.config import MAX_TABLE_WIDTH, DEFAULT_CELL_WIDTH
 
 class TableGenerator:
     """HWPML 표 생성 전담 클래스"""
