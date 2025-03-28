@@ -3,6 +3,10 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+# Converted documents
+convertedDocs/*
+!convertedDocs/.gitkeep
+
 # C extensions
 *.so
 
