@@ -6,13 +6,13 @@ import sys
 import datetime
 from PySide6.QtWidgets import (QMainWindow, QTextEdit, QPushButton, QFileDialog,
                               QVBoxLayout, QHBoxLayout, QWidget, QStatusBar, QApplication,
-                              QLabel, QSizePolicy, QFrame)
+                              QLabel, QSizePolicy, QFrame,QMenu)
 from PySide6.QtCore import Qt, QEvent, QTimer
 from PySide6.QtGui import QIcon, QPalette, QColor, QDragEnterEvent, QDropEvent, QGuiApplication, QFont
 
 from .status_handler import StatusHandler
 from ..config import APP_NAME, OUTPUT_DIR_NAME, DEFAULT_ENCODING
-from ..utils.file_utils import ensure_directory, generate_output_filename, save_text_file, open_file
+from ..utils.file_utils import ensure_directory, generate_output_filename, save_text_file, open_file,open_file_explorer
 
 # --- 수정된 QSS ---
 UPDATED_IOS_LIKE_QSS = """
@@ -146,7 +146,6 @@ class MainWindow(QMainWindow):
         self.converter = converter
         self.template_path = ""
         self.output_path = None
-        self.user_selected_output_path = False
         self.is_converting = False
 
         self.setup_ui()
@@ -159,7 +158,8 @@ class MainWindow(QMainWindow):
 
         icon_folder = QIcon.fromTheme("folder-open", QIcon(":/qt-project.org/styles/commonstyle/images/diropen.png"))
         icon_clipboard = QIcon.fromTheme("edit-paste", QIcon(":/qt-project.org/styles/commonstyle/images/paste.png"))
-        icon_save = QIcon.fromTheme("document-save-as", QIcon(":/qt-project.org/styles/commonstyle/images/save.png"))
+        icon_explore = QIcon.fromTheme("folder", QIcon(":/qt-project.org/styles/commonstyle/images/diropen.png")) # 탐색기 아이콘 추가
+
         # 변환 아이콘 - 다른 버튼과 동일한 스타일의 아이콘 사용
         icon_convert = QIcon.fromTheme("document-send", QIcon(":/qt-project.org/styles/commonstyle/images/up.png"))
         
@@ -167,6 +167,9 @@ class MainWindow(QMainWindow):
         if icon_convert.isNull():
             # 아이콘 없이 텍스트만 사용
             icon_convert = QIcon()
+
+        if icon_explore.isNull(): icon_explore = QIcon()
+
 
         self.central_widget = QWidget()
         self.setCentralWidget(self.central_widget)
@@ -181,7 +184,15 @@ class MainWindow(QMainWindow):
         self.clipboard_button = QPushButton(" 클립보드")
         self.clipboard_button.setIcon(icon_clipboard)
         self.save_button = QPushButton(" 저장 경로")
-        self.save_button.setIcon(icon_save)
+        
+        # --- 파일 위치 보기 버튼 및 메뉴 추가 ---
+        self.file_explore_button = QPushButton(" 파일 위치") # 버튼 텍스트 변경
+        self.file_explore_button.setIcon(icon_explore)
+        self.file_explore_menu = QMenu()
+        self.show_output_action = self.file_explore_menu.addAction("변환 파일 위치") # 메뉴 텍스트 변경
+        self.show_template_action = self.file_explore_menu.addAction("템플릿 파일 위치") # 메뉴 텍스트 변경
+        self.file_explore_button.setMenu(self.file_explore_menu)
+        
         # 변환 버튼 텍스트 수정
         self.convert_button = QPushButton(" 변환하기")
         self.convert_button.setIcon(icon_convert) # 아이콘 적용
@@ -213,7 +224,7 @@ class MainWindow(QMainWindow):
         top_button_layout.setSpacing(10)
         top_button_layout.addWidget(self.template_button)
         top_button_layout.addWidget(self.clipboard_button)
-        top_button_layout.addWidget(self.save_button)
+        top_button_layout.addWidget(self.file_explore_button)
         top_button_layout.addStretch(1)
         top_button_layout.addWidget(self.convert_button)
         main_layout.addLayout(top_button_layout)
@@ -233,9 +244,11 @@ class MainWindow(QMainWindow):
 
         self.template_button.clicked.connect(self.select_template)
         self.clipboard_button.clicked.connect(self.load_from_clipboard)
-        self.save_button.clicked.connect(self.select_output_path)
         self.convert_button.clicked.connect(self.convert)
 
+        self.show_output_action.triggered.connect(self.show_output_location)
+        self.show_template_action.triggered.connect(self.show_template_location)
+        
         self.setAcceptDrops(True)
         self.setup_overlay()
 
@@ -340,19 +353,29 @@ class MainWindow(QMainWindow):
         else:
             self.status_handler.set_warning("클립보드에 텍스트가 없습니다.")
 
-    def select_output_path(self):
-        if self.is_converting: return
-        default_dir = os.path.dirname(self.output_path) if self.user_selected_output_path and self.output_path else self.output_dir
-        default_filename = os.path.basename(self.output_path) if self.user_selected_output_path and self.output_path else f"converted_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.hml"
-        default_path = os.path.join(default_dir, default_filename)
-        file_path, _ = QFileDialog.getSaveFileName(self, "HWPML 파일로 저장", default_path, "HWPML 파일 (*.hml)")
-        if file_path:
-            if not file_path.lower().endswith('.hml'): file_path += '.hml'
-            self.output_path = file_path
-            self.user_selected_output_path = True
-            self.output_label.setText(f"출력 경로: {file_path}")
-            self.status_handler.set_message(f"출력 경로 설정: {os.path.basename(file_path)}", 3000)
+    # --- 추가된 메서드 ---
+    def show_output_location(self):
+        """변환된 한글 파일 위치를 파일 탐색기에서 보여줌"""
+        if self.output_path and os.path.exists(self.output_path): # 파일 존재 여부 확인 추가
+            try:
+                open_file_explorer(self.output_path, handle_type='output')
+            except Exception as e:
+                self.status_handler.set_error(f"파일 탐색기 열기 실패: {str(e)}")
+        elif self.output_path: # 경로 값은 있으나 파일이 없는 경우 (오류?)
+            self.status_handler.set_error(f"파일을 찾을 수 없습니다: {os.path.basename(self.output_path)}")
+        else:
+            self.status_handler.set_warning("아직 변환된 파일이 없습니다.")
 
+    def show_template_location(self):
+        """선택된 템플릿 파일 위치를 파일 탐색기에서 보여줌"""
+        if self.template_path and os.path.exists(self.template_path): # 파일 존재 여부 확인 추가
+            try:
+                open_file_explorer(self.template_path, handle_type='template')
+            except Exception as e:
+                self.status_handler.set_error(f"파일 탐색기 열기 실패: {str(e)}")
+        else:
+            self.status_handler.set_warning("먼저 템플릿을 선택하세요.")
+    
     def convert(self):
         if self.is_converting: return
         if not self.template_path or "선택되지 않음" in self.template_label.text():
@@ -363,14 +386,14 @@ class MainWindow(QMainWindow):
             self.status_handler.set_warning("변환할 텍스트가 없습니다.")
             return
 
-        if self.user_selected_output_path and self.output_path:
-            current_output_path = self.output_path
-            current_output_dir = os.path.dirname(current_output_path)
-        else:
-            current_output_dir = self.output_dir
-            current_output_path = generate_output_filename(current_output_dir)
-            self.output_label.setText(f"출력 경로: {current_output_path}")
+        # --- 출력 경로 로직 수정 ---
+        # 사용자가 경로를 선택하는 부분이 없어졌으므로 항상 자동 생성
+        current_output_dir = self.output_dir
+        current_output_path = generate_output_filename(current_output_dir)
+        self.output_path = current_output_path # 멤버 변수 업데이트 (show_output_location 위함)
+        self.output_label.setText(f"출력 경로: {current_output_path}") # 라벨 업데이트
         ensure_directory(current_output_dir)
+        # --- ---
 
         self.is_converting = True
         self.set_ui_enabled(False)
@@ -381,6 +404,7 @@ class MainWindow(QMainWindow):
             hwpml_content = self.converter.convert_md_to_hwpml(md_text)
             save_text_file(current_output_path, hwpml_content, encoding=DEFAULT_ENCODING)
             self.status_handler.set_success(f"변환 완료: {os.path.basename(current_output_path)}")
+            # 파일 열기 시도 (기존 코드 유지)
             QTimer.singleShot(100, lambda: self.try_open_result(current_output_path, current_output_dir))
         except Exception as e:
             import traceback
@@ -388,21 +412,22 @@ class MainWindow(QMainWindow):
             self.status_handler.set_error(f"변환 중 오류 발생: {str(e)}")
         finally:
             self.is_converting = False
-            QTimer.singleShot(200, lambda: self.set_ui_enabled(True))
-
+            # UI 활성화 타이밍 약간 늦춤 (상태 메시지 표시 시간 확보)
+            QTimer.singleShot(500, lambda: self.set_ui_enabled(True))
     def set_ui_enabled(self, enabled: bool):
         self.template_button.setEnabled(enabled)
         self.clipboard_button.setEnabled(enabled)
-        self.save_button.setEnabled(enabled)
+        self.file_explore_button.setEnabled(enabled)
         self.convert_button.setEnabled(enabled)
         self.text_edit.setEnabled(enabled)
 
     def try_open_result(self, file_path, folder_path):
+        # 파일 열기 실패 시 폴더 열기 (기존 코드 유지)
         if not open_file(file_path):
             try:
-                if sys.platform == "win32": os.startfile(folder_path)
-                elif sys.platform == "darwin": import subprocess; subprocess.run(['open', folder_path])
-                else: import subprocess; subprocess.run(['xdg-open', folder_path])
-                self.status_handler.set_warning("파일 열기 실패. 저장 폴더를 열었습니다.", 5000)
+                # open_file_explorer 를 사용하여 폴더 열기 시도
+                open_file_explorer(folder_path) # 파일 경로나 폴더 경로 모두 처리 가능
+                self.status_handler.set_warning("파일 자동 열기 실패. 저장 폴더를 열었습니다.", 5000)
             except Exception as folder_err:
                  self.status_handler.set_warning(f"파일/폴더 자동 열기 실패: {folder_err}", 5000)
+
