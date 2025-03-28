@@ -4,6 +4,7 @@
 import os
 import datetime
 import io
+
 import platform  # 추가
 import subprocess # 추가
 import time      # 추가
@@ -12,7 +13,7 @@ try:             # Windows 특정 기능이므로 try-except 추가
 except ImportError:
     win32gui = None # 다른 OS에서는 None으로 설정
 
-# 전역 변수로 explorer_handle 초기화 (용도별로 분리) - 추가
+
 explorer_handles = {
     'output': None,  # 한글 문서 경로용
     'template': None  # 템플릿 경로용
@@ -61,12 +62,15 @@ def get_explorer_windows():
 
     handles = set()
 
+
     def enum_callback(hwnd, extra):
         if win32gui.IsWindowVisible(hwnd):
             if win32gui.GetClassName(hwnd) == "CabinetWClass":
                 handles.add(hwnd)
+
                 # print(f"발견된 Explorer 창 핸들: {hwnd}") # 디버깅용 출력은 주석 처리
         return True
+
 
     win32gui.EnumWindows(enum_callback, None)
     return handles
@@ -76,6 +80,7 @@ def open_file_explorer(file_path, handle_type='output'):
     파일의 절대 경로를 기준으로 파일 탐색기를 실행합니다.
     Windows의 경우, 이미 Explorer 창(새로 열린 창)이 있으면 새 창을 열지 않습니다.
 
+
     Args:
         file_path (str): 파일의 경로 (절대 경로 권장)
         handle_type (str): 핸들러 타입 ('output' 또는 'template')
@@ -84,10 +89,12 @@ def open_file_explorer(file_path, handle_type='output'):
         FileNotFoundError: file_path가 존재하지 않을 경우
         OSError: 지원하지 않는 운영체제일 경우
         ImportError: Windows가 아닌 환경에서 Windows 관련 기능을 사용하려 할 때
+
     """
     global explorer_handles
 
     file_path = os.path.abspath(file_path)
+
     # 파일 대신 폴더를 열어야 하는 경우를 위해, 경로가 폴더인지 파일인지 확인
     if not os.path.exists(file_path):
          # 파일이 없다면 상위 폴더라도 존재하는지 확인
@@ -130,6 +137,7 @@ def open_file_explorer(file_path, handle_type='output'):
 
         while attempts < max_attempts:
             time.sleep(0.5) # 먼저 잠시 기다린 후 창 목록 확인
+
             after_windows = get_explorer_windows()
             new_windows = after_windows - before_windows
             if new_windows:
@@ -137,6 +145,7 @@ def open_file_explorer(file_path, handle_type='output'):
             attempts += 1
 
         # print(f"새로 열린 Explorer 창 목록 ({handle_type}): {new_windows}") # 디버깅용 출력 주석처리
+
 
         if new_windows:
             # 새로 열린 Explorer 창의 핸들을 저장
@@ -154,6 +163,7 @@ def open_file_explorer(file_path, handle_type='output'):
     elif system == "Linux":
         # 리눅스에서는 파일 경로든 폴더 경로든 상위 폴더를 열어주는 것이 일반적
         folder = file_path if os.path.isdir(file_path) else os.path.dirname(file_path)
+
         subprocess.Popen(["xdg-open", folder])
     else:
         raise OSError(f"지원하지 않는 운영체제: {system}")

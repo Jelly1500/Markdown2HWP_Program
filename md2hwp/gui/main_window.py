@@ -137,6 +137,7 @@ QLabel#OverlayLabel {
 """
 
 
+
 class MainWindow(QMainWindow):
     """GUI 메인 창 클래스 (수정된 스타일 적용)"""
 
@@ -247,6 +248,7 @@ class MainWindow(QMainWindow):
         top_button_layout.addWidget(self.convert_button)
         main_layout.addLayout(top_button_layout)
 
+
         # 텍스트 편집 영역
         main_layout.addWidget(self.text_edit, 1) # stretch factor 1
 
@@ -267,6 +269,7 @@ class MainWindow(QMainWindow):
         # --- 시그널 연결 ---
         self.template_button.clicked.connect(self.select_template)
         self.clipboard_button.clicked.connect(self.load_from_clipboard)
+
         self.convert_button.clicked.connect(self.convert)
         # 메뉴 액션 시그널 연결
         self.show_output_action.triggered.connect(self.show_output_location)
@@ -390,6 +393,7 @@ class MainWindow(QMainWindow):
         """변환된 파일 위치 또는 기본 출력 폴더(convertedDocs)를 파일 탐색기에서 보여줌"""
         path_to_open = self.default_output_dir # 기본적으로 convertedDocs 폴더 경로
 
+
         # 마지막으로 변환된 파일 경로가 있고, 해당 파일이 실제로 존재하면
         if self.output_path and os.path.exists(self.output_path):
             # 해당 파일 경로를 사용 (탐색기에서 해당 파일이 선택됨)
@@ -454,6 +458,7 @@ class MainWindow(QMainWindow):
         # ensure_directory(current_output_dir)
         # --- ---
 
+
         # UI 비활성화 및 상태 메시지 설정
         self.is_converting = True
         self.set_ui_enabled(False)
@@ -469,6 +474,7 @@ class MainWindow(QMainWindow):
             self.status_handler.set_success(f"변환 완료: {os.path.basename(current_output_path)}")
             # 변환된 파일 자동 열기 시도 (약간의 지연 후)
             QTimer.singleShot(100, lambda: self.try_open_result(current_output_path, current_output_dir))
+
         except Exception as e:
             # 오류 발생 시 처리
             import traceback

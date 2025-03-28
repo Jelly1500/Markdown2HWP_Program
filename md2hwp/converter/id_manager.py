@@ -1,5 +1,6 @@
 """
 ID 관리 모듈: ID 카운터의 중앙 관리
+ID = HWP(Hancom Word Processor) 문서 변환 과정에서 사용되는 고유 식별자(ID)
 """
 
 class IDManager:
