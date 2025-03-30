@@ -13,6 +13,10 @@ try:             # Windows 특정 기능이므로 try-except 추가
 except ImportError:
     win32gui = None # 다른 OS에서는 None으로 설정
 
+try:
+    from PySide6.QtCore import QTimer
+except ImportError:
+    QTimer = None # PySide6가 없는 환경 대비
 
 explorer_handles = {
     'output': None,  # 한글 문서 경로용
@@ -109,51 +113,45 @@ def open_file_explorer(file_path, handle_type='output'):
     if system == "Windows":
         if not win32gui:
              raise ImportError("Windows 환경이 아니거나 'pywin32' 라이브러리가 설치되지 않았습니다.")
+        if not QTimer:
+             print("경고: QTimer를 임포트할 수 없어 탐색기 핸들 캡처가 비활성화됩니다.")
+             if os.path.isdir(file_path):
+                 subprocess.Popen(["explorer", file_path])
+             else:
+                 subprocess.Popen(["explorer", "/select,", file_path])
+             return
 
-        # 이미 열린 Explorer 창이 있는지 확인 (저장해 둔 핸들이 유효하면)
         if explorer_handles[handle_type] is not None and win32gui.IsWindow(explorer_handles[handle_type]):
-            # 이미 열린 창을 활성화 시도 (선택 사항)
             try:
                  win32gui.SetForegroundWindow(explorer_handles[handle_type])
             except Exception as e:
-                 print(f"기존 창 활성화 실패: {e}") # 실패해도 계속 진행
-            # 이미 열린 Explorer 창이 있으므로 새 창을 열지 않음.
-            return
+                 print(f"기존 창 활성화 실패: {e}") # 실패해도 계속 진행 (새로 열기 시도)
+                 explorer_handles[handle_type] = None # 핸들 무효화
+            else:
+                 return 
 
-        # 새 Explorer 창을 열기 전, 현재 열린 Explorer 창 목록 기록
-        # print(f"현재 열린 Explorer 창 목록 기록 ({handle_type})") # 디버깅용 출력 주석처리
         before_windows = get_explorer_windows()
 
-        # Explorer를 실행하여 해당 파일이 선택된 상태로 열기 (폴더면 폴더 열기)
         if os.path.isdir(file_path):
              subprocess.Popen(["explorer", file_path])
         else:
              subprocess.Popen(["explorer", "/select,", file_path])
+        
+        def _capture_handle():
+            nonlocal handle_type, before_windows # 외부 변수 참조
+            try:
+                after_windows = get_explorer_windows()
+                new_windows = after_windows - before_windows
+                if new_windows:
+                    explorer_handles[handle_type] = new_windows.pop()
+                else:
+                    explorer_handles[handle_type] = None
+            except Exception as e:
+                print(f"핸들 캡처 중 오류: {e}")
+                explorer_handles[handle_type] = None
 
-        # 새 창이 감지될 때까지 대기 (최대 5초) - 시간 단축
-        max_attempts = 10  # 5초 (0.5초 * 10)
-        attempts = 0
-        new_windows = set()
-
-        while attempts < max_attempts:
-            time.sleep(0.5) # 먼저 잠시 기다린 후 창 목록 확인
-
-            after_windows = get_explorer_windows()
-            new_windows = after_windows - before_windows
-            if new_windows:
-                break
-            attempts += 1
-
-        # print(f"새로 열린 Explorer 창 목록 ({handle_type}): {new_windows}") # 디버깅용 출력 주석처리
-
-
-        if new_windows:
-            # 새로 열린 Explorer 창의 핸들을 저장
-            explorer_handles[handle_type] = new_windows.pop()
-        else:
-            explorer_handles[handle_type] = None
-
-        # print(f"새로 열린 Explorer 창의 핸들 ({handle_type}): {explorer_handles[handle_type]}") # 디버깅용 출력 주석처리
+        QTimer.singleShot(1000, _capture_handle)
+        
 
     elif system == "Darwin": # macOS
          if os.path.isdir(file_path):
