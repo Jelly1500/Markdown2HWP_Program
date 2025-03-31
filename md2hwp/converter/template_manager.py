@@ -15,6 +15,7 @@ class TemplateManager:
         self.table_border_fills = {'header': "3", 'footer': "4", 'body': "6"}  # 기본값
         self.style_mapping_order = STYLE_MAPPING_ORDER
         self.bullet_symbol = DEFAULT_BULLET_SYMBOL  # 기본 글머리표
+        self.margin_para_shapes = {}
     
     def load_template(self, template_path):
         """HWPML 템플릿 파일 로드 및 서식 구조 추출"""
@@ -32,6 +33,9 @@ class TemplateManager:
             border_result = self.add_table_borderfills()
             if not border_result:
                 print("테이블 테두리 스타일 추가에 실패했습니다. 기본값을 사용합니다.")
+            
+            # 여백이 포함된 ParaShape 생성
+            self._create_margin_para_shapes()
             
             return True
         except Exception as e:
@@ -329,3 +333,62 @@ class TemplateManager:
         # 템플릿 내용 업데이트
         self.template_content = str(soup)
         return True 
+
+    def _create_margin_para_shapes(self):
+        """여백이 포함된 ParaShape 생성"""
+        soup = BeautifulSoup(self.template_content, 'xml')
+        
+        # PARASHAPELIST 찾기
+        parashape_list = soup.find('PARASHAPELIST')
+        if not parashape_list:
+            print("PARASHAPELIST를 찾을 수 없습니다.")
+            return
+        
+        # 기존 ID 중 가장 큰 값 찾기
+        existing_ids = [int(ps.get('Id', '0')) for ps in parashape_list.find_all('PARASHAPE')]
+        next_id = max(existing_ids) + 1 if existing_ids else 1
+        
+        # h2용 ParaShape (문단 간격 160%)
+        h2_parashape = self._create_parashape_with_spacing(soup, next_id, 160)
+        if h2_parashape:
+            parashape_list.append(h2_parashape)
+            self.margin_para_shapes['h2'] = str(next_id)
+        
+        # Count 속성 업데이트
+        parashape_list['Count'] = str(len(parashape_list.find_all('PARASHAPE')))
+        
+        # 템플릿 내용 업데이트
+        self.template_content = str(soup)
+    
+    def _create_parashape_with_spacing(self, soup, para_id, line_spacing):
+        """문단 간격이 조정된 ParaShape 생성"""
+        # 기본 ParaShape 복제
+        base_parashape = soup.find('PARASHAPE')
+        if not base_parashape:
+            print("기본 ParaShape을 찾을 수 없습니다.")
+            return None
+        
+        new_parashape = soup.new_tag("PARASHAPE")
+        
+        # 모든 속성 복사
+        for attr, value in base_parashape.attrs.items():
+            new_parashape[attr] = value
+        
+        # ID 업데이트
+        new_parashape['Id'] = str(para_id)
+        
+        # 기존 속성 복사
+        for child in base_parashape.children:
+            if isinstance(child, NavigableString):
+                new_parashape.append(child.copy())
+            else:
+                new_child = soup.new_tag(child.name)
+                for attr, value in child.attrs.items():
+                    new_child[attr] = value
+                new_parashape.append(new_child)
+        
+        # 문단 간격 설정
+        new_parashape['LineSpacing'] = str(line_spacing)
+        new_parashape['LineSpacingType'] = "Percent"  # 비율 단위 사용
+        
+        return new_parashape 

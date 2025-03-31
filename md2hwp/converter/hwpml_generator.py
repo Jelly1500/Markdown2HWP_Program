@@ -81,7 +81,20 @@ class HWPMLGenerator:
                 # 헤딩 처리 (원본 또는 수정된 구조 사용)
                 hwpml += self._insert_text_into_template(h1_structure_to_use, element['content'])
             # ----------------------------------
-            elif element_type in ['h2', 'h3', 'h4', 'h5', 'h6']:
+            elif element_type == 'h2':
+                # h2 태그에 문단 간격이 조정된 ParaShape 적용
+                margin_para_shape = self.template_manager.margin_para_shapes.get('h2')
+                if margin_para_shape:
+                    # P 태그의 ParaShape 속성만 수정
+                    modified_structure = re.sub(
+                        r'ParaShape="(\d+)"',
+                        f'ParaShape="{margin_para_shape}"',
+                        h1_structure_to_use
+                    )
+                    hwpml += self._insert_text_into_template(modified_structure, element['content'])
+                else:
+                    hwpml += self._insert_text_into_template(h1_structure_to_use, element['content'])
+            elif element_type in ['h3', 'h4', 'h5', 'h6']:
                 hwpml += self._insert_text_into_template(h1_structure_to_use, element['content'])
             elif element_type == 'p':
                 if element.get('has_formatting', False):
@@ -390,4 +403,4 @@ class HWPMLGenerator:
             para_shape = "0"
             char_shape = "0"
         
-        return f'<P ParaShape="{para_shape}" Style="0"><TEXT CharShape="{char_shape}"><CHAR>{content}</CHAR></TEXT></P>' 
+        return f'<P ParaShape="{para_shape}" Style="0"><TEXT CharShape="{char_shape}"><CHAR>{content}</CHAR></TEXT></P>'
