@@ -112,6 +112,9 @@ class HWPMLGenerator:
             fragment_type = fragment['type']
             content = fragment['content']
             
+            # &를 &amp;로 변환
+            content = content.replace('&', '&amp;')
+            
             if fragment_type == 'text':
                 hwpml += f'<TEXT CharShape="{normal_char_shape}"><CHAR>{content}</CHAR></TEXT>'
             elif fragment_type == 'strong':
@@ -141,6 +144,9 @@ class HWPMLGenerator:
     
     def _insert_text_into_template(self, template, text, preserve_prefix=True):
         """텍스트를 템플릿의 CHAR 태그 내에 삽입"""
+        # & 문자를 &amp;로 변환
+        text = text.replace('&', '&amp;')
+        
         # 특수 문자 처리
         template_type = None
         for style_type, style_info in self.template_manager.template_styles.items():
@@ -329,6 +335,9 @@ class HWPMLGenerator:
         for fragment in fragments:
             fragment_type = fragment['type']
             content = fragment['content']
+            
+            # &를 &amp;로 변환
+            content = content.replace('&', '&amp;')
 
             if fragment_type == 'text':
                 hwpml += f'<TEXT CharShape="{text_char_shape}"><CHAR>{content}</CHAR></TEXT>'
@@ -366,6 +375,9 @@ class HWPMLGenerator:
         """기본 HWPML 요소 생성"""
         element_type = element['type']
         content = element.get('content', '')
+        
+        # &를 &amp;로 변환
+        content = content.replace('&', '&amp;')
         
         if element_type in ['h1', 'h2', 'h3', 'h4', 'h5', 'h6']:
             level = int(element_type[1])
