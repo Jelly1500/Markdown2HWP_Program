@@ -36,7 +36,7 @@ QTextEdit#MarkdownInput:disabled {
 }
 
 /* 버튼 공통 스타일 */
-QPushButton {
+QPushButton, QToolButton {
     border: none;
     padding: 9px 16px; /* 패딩 미세 조정 */
     border-radius: 6px; /* 둥근 모서리 */
@@ -46,21 +46,27 @@ QPushButton {
     min-width: 90px;
     outline: none;
 }
-QPushButton:disabled {
+QPushButton:disabled, QToolButton:disabled {
     background-color: #e0e0e0;
     color: #a0a0a0;
 }
 
 /* 보조 버튼 (템플릿, 로드, 저장) */
-QPushButton { /* 기본값 */
+QPushButton, QToolButton { /* 기본값 */
     background-color: #f0f2f5; /* 텍스트 영역 배경과 유사한 회색 */
     color: #1d1d1f; /* 텍스트 색상 검은색 계열로 변경 */
 }
-QPushButton:hover {
+QPushButton:hover, QToolButton:hover {
     background-color: #e2e5e8;
 }
-QPushButton:pressed {
+QPushButton:pressed, QToolButton:pressed {
     background-color: #d8dde0;
+}
+
+/* QToolButton 메뉴 표시기 숨김 */
+QToolButton::menu-indicator {
+    image: none;
+    width: 0px;
 }
 
 /* 주요 액션 버튼 (변환) - 모던 스타일 */
