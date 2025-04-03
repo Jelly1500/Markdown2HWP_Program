@@ -4,6 +4,7 @@ HWPML 템플릿 관리 모듈
 import re
 from bs4 import BeautifulSoup, NavigableString
 from ..config import STYLE_MAPPING_ORDER, DEFAULT_BULLET_SYMBOL
+import os
 
 class TemplateManager:
     """HWPML 템플릿 관리 클래스"""
@@ -16,6 +17,18 @@ class TemplateManager:
         self.style_mapping_order = STYLE_MAPPING_ORDER
         self.bullet_symbol = DEFAULT_BULLET_SYMBOL  # 기본 글머리표
         self.margin_para_shapes = {}
+        
+        # 기본 템플릿 경로 설정 수정
+        base_path = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        self.default_template_dir = os.path.join(base_path, "md2hwp", "new_template")
+        self.default_template_file = os.path.join(self.default_template_dir, "템플릿문서.hml")
+        
+        # 디버깅을 위한 경로 출력
+        print(f"Template Manager 초기화:")
+        print(f"Base Path: {base_path}")
+        print(f"Default Template Dir: {self.default_template_dir}")
+        print(f"Default Template File: {self.default_template_file}")
+        print(f"Default Template File Exists: {os.path.exists(self.default_template_file)}")
     
     def load_template(self, template_path):
         """HWPML 템플릿 파일 로드 및 서식 구조 추출"""
@@ -392,3 +405,78 @@ class TemplateManager:
         new_parashape['LineSpacingType'] = "Percent"  # 비율 단위 사용
         
         return new_parashape 
+
+    def create_default_template(self, template_name):
+        """기본 문서 설정이 적용된 새 템플릿 생성"""
+        try:
+            # 템플릿 이름에 .hml 확장자 추가
+            if not template_name.endswith('.hml'):
+                template_name += '.hml'
+            
+            # 새 템플릿 파일 경로
+            new_template_path = os.path.join(self.default_template_dir, template_name)
+            
+            # 기본 템플릿 파일이 존재하는지 확인
+            if not os.path.exists(self.default_template_file):
+                error_msg = f"기본 템플릿 파일을 찾을 수 없습니다.\n경로: {self.default_template_file}"
+                print(error_msg)  # 디버깅을 위한 출력
+                return False, error_msg
+            
+            # 기본 템플릿 파일을 새 템플릿 파일로 복사
+            import shutil
+            try:
+                shutil.copy2(self.default_template_file, new_template_path)
+                print(f"새 템플릿 생성 성공: {new_template_path}")  # 디버깅을 위한 출력
+                return True, f"새 템플릿 '{template_name}' 생성 완료"
+            except Exception as copy_error:
+                error_msg = f"파일 복사 중 오류 발생: {str(copy_error)}"
+                print(error_msg)  # 디버깅을 위한 출력
+                return False, error_msg
+            
+        except Exception as e:
+            error_msg = f"템플릿 생성 중 오류 발생: {str(e)}"
+            print(error_msg)  # 디버깅을 위한 출력
+            return False, error_msg
+
+    def create_template_from_source(self, source_path, template_name):
+        """원본 문서 설정이 적용된 새 템플릿 생성"""
+        try:
+            # 템플릿 이름에 .hml 확장자 추가
+            if not template_name.endswith('.hml'):
+                template_name += '.hml'
+            
+            # 새 템플릿 파일 경로
+            new_template_path = os.path.join(self.default_template_dir, template_name)
+            
+            # 기본 템플릿 파일이 존재하는지 확인
+            if not os.path.exists(self.default_template_file):
+                return False, "기본 템플릿 파일을 찾을 수 없습니다."
+            
+            # 원본 파일에서 PAGEDEF 태그 전체 추출
+            with open(source_path, 'r', encoding='utf-8') as f:
+                source_content = f.read()
+            
+            # PAGEDEF 태그 전체를 정규식으로 추출
+            pagedef_pattern = r'<PAGEDEF[^>]*>.*?</PAGEDEF>'
+            pagedef_match = re.search(pagedef_pattern, source_content, re.DOTALL)
+            
+            if not pagedef_match:
+                return False, "원본 파일에서 PAGEDEF 태그를 찾을 수 없습니다."
+            
+            source_pagedef = pagedef_match.group(0)
+            
+            # 기본 템플릿 파일 로드
+            with open(self.default_template_file, 'r', encoding='utf-8') as f:
+                template_content = f.read()
+            
+            # 기본 템플릿의 PAGEDEF 태그를 원본의 PAGEDEF 태그로 교체
+            template_content = re.sub(pagedef_pattern, source_pagedef, template_content, flags=re.DOTALL)
+            
+            # 수정된 템플릿을 새 파일로 저장
+            with open(new_template_path, 'w', encoding='utf-8') as f:
+                f.write(template_content)
+            
+            return True, f"새 템플릿 '{template_name}' 생성 완료"
+            
+        except Exception as e:
+            return False, f"템플릿 생성 중 오류 발생: {str(e)}" 

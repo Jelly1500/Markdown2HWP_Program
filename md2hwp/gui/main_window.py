@@ -8,7 +8,7 @@ import re
 from PySide6.QtWidgets import (QMainWindow, QTextEdit, QPushButton, QFileDialog, # <- QTextEdit 여기로 이동
                               QVBoxLayout, QHBoxLayout, QWidget, QStatusBar, QApplication,
                               QLabel, QSizePolicy, QFrame, QMenu, QMessageBox,
-                              QGroupBox, QToolButton)
+                              QGroupBox, QToolButton, QInputDialog)
 from PySide6.QtCore import Qt, QEvent, QTimer, QRegularExpression, QPropertyAnimation, QEasingCurve, QSize
 # QtGui에서 필요한 클래스들을 가져옵니다. 
 from PySide6.QtGui import (QIcon, QPalette, QColor, QDragEnterEvent, QDropEvent,
@@ -109,6 +109,20 @@ class MainWindow(QMainWindow):
         self.output_label.setObjectName("FilePathLabel")
         self.output_label.setAlignment(Qt.AlignmentFlag.AlignRight)
 
+        # 새 템플릿 생성 메뉴 추가
+        self.new_template_menu = QMenu("새 템플릿 생성")
+        self.new_template_menu.addAction("기본 문서 설정이 적용된 템플릿 생성", self.create_default_template)
+        self.new_template_menu.addAction("원본 문서 설정이 적용된 템플릿 생성", self.create_template_from_source)
+        
+        # 새 템플릿 생성 버튼 추가
+        self.new_template_button = QToolButton()
+        self.new_template_button.setText("새 템플릿 생성")
+        self.new_template_button.setIcon(icon_folder)
+        self.new_template_button.setMenu(self.new_template_menu)
+        self.new_template_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        self.new_template_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self.new_template_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+
         # --- 레이아웃 설정 ---
         main_layout = QVBoxLayout(self.central_widget)
         main_layout.setContentsMargins(20, 20, 20, 20)
@@ -128,6 +142,7 @@ class MainWindow(QMainWindow):
 
         top_button_layout = QHBoxLayout()
         top_button_layout.setSpacing(10)
+        top_button_layout.addWidget(self.new_template_button)  # 새 템플릿 생성 버튼 추가
         top_button_layout.addWidget(self.template_button)
         top_button_layout.addWidget(self.clipboard_button)
         top_button_layout.addWidget(self.file_explore_button)
@@ -603,4 +618,67 @@ class MainWindow(QMainWindow):
         # 버튼들을 다시 최상위로 올리기
         self.heading_button_container.raise_()
         self.sub_heading_widget.raise_()
+
+    def create_default_template(self):
+        """기본 문서 설정이 적용된 새 템플릿 생성"""
+        try:
+            # 사용자로부터 새 템플릿 이름 입력 받기
+            template_name, ok = QInputDialog.getText(
+                self, "새 템플릿 생성", 
+                "템플릿 이름을 입력하세요 (확장자 제외):",
+                text="새템플릿"
+            )
+            
+            if not ok or not template_name:
+                return
+                
+            # 템플릿 생성
+            success, message = self.converter.template_manager.create_default_template(template_name)
+            
+            if success:
+                QMessageBox.information(self, "성공", message)
+            else:
+                QMessageBox.critical(self, "오류", message)
+            
+        except Exception as e:
+            QMessageBox.critical(
+                self, "오류",
+                f"템플릿 생성 중 오류가 발생했습니다: {str(e)}"
+            )
+
+    def create_template_from_source(self):
+        """원본 문서 설정이 적용된 새 템플릿 생성"""
+        try:
+            # 사용자로부터 원본 HML 파일 선택
+            source_path, _ = QFileDialog.getOpenFileName(
+                self, "원본 HML 파일 선택",
+                "", "HML 파일 (*.hml)"
+            )
+            
+            if not source_path:
+                return
+                
+            # 사용자로부터 새 템플릿 이름 입력 받기
+            template_name, ok = QInputDialog.getText(
+                self, "새 템플릿 생성", 
+                "템플릿 이름을 입력하세요 (확장자 제외):",
+                text="새템플릿"
+            )
+            
+            if not ok or not template_name:
+                return
+                
+            # 템플릿 생성
+            success, message = self.converter.template_manager.create_template_from_source(source_path, template_name)
+            
+            if success:
+                QMessageBox.information(self, "성공", message)
+            else:
+                QMessageBox.critical(self, "오류", message)
+            
+        except Exception as e:
+            QMessageBox.critical(
+                self, "오류",
+                f"템플릿 생성 중 오류가 발생했습니다: {str(e)}"
+            )
 
