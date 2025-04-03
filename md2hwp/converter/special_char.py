@@ -13,6 +13,9 @@ class SpecialCharHandler:
         
         # 특수 문자 유니코드 매핑
         self.special_char_maps = SPECIAL_CHAR_MAPS
+        
+        # 헤딩 레벨별 계층 구조를 위한 데이터
+        self.heading_levels = ['h1', 'h2', 'h3', 'h4', 'h5', 'h6']
     
     def identify_special_char(self, char):
         """특수 문자가 어떤 유형인지 식별하고 정보 반환"""
@@ -36,7 +39,7 @@ class SpecialCharHandler:
         return None
     
     def increment_special_char(self, char, template_type):
-        """특수 문자를 식별하고 증가된 값의 문자 반환"""
+        """특수 문자를 식별하고 증가된 값의 문자 반환 (카운터 초기화 로직 제거)"""
         special_char_info = self.identify_special_char(char)
         if not special_char_info:
             return char  # 특수 문자가 아니면 그대로 반환
@@ -80,7 +83,15 @@ class SpecialCharHandler:
         return chr(next_code_point)
     
     def process_special_chars_in_template(self, template, template_type, text):
-        """템플릿 내의 특수 문자를 처리하여 자동 증가시킴"""
+        """템플릿 내의 특수 문자를 처리하여 자동 증가시킴 (하위 헤딩 카운터 초기화 추가)"""
+        
+        # 헤딩 계층 구조 처리: 현재 템플릿 타입이 헤딩이면 하위 레벨 카운터 초기화
+        if template_type in self.heading_levels:
+            current_level_index = self.heading_levels.index(template_type)
+            for level in self.heading_levels[current_level_index + 1:]:
+                if level in self.special_char_counters:
+                    self.special_char_counters[level] = {}
+        
         # 모든 <CHAR>...</CHAR> 태그 찾기
         char_pattern = re.compile(r'<CHAR>(.*?)</CHAR>')
         matches = list(char_pattern.finditer(template))
