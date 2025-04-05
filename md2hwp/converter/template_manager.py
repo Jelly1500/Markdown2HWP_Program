@@ -452,25 +452,43 @@ class TemplateManager:
             if not os.path.exists(self.default_template_file):
                 return False, "기본 템플릿 파일을 찾을 수 없습니다."
             
-            # 원본 파일에서 PAGEDEF 태그 전체 추출
+            # 원본 파일에서 HEAD 태그 전체 추출
             with open(source_path, 'r', encoding='utf-8') as f:
                 source_content = f.read()
             
-            # PAGEDEF 태그 전체를 정규식으로 추출
-            pagedef_pattern = r'<PAGEDEF[^>]*>.*?</PAGEDEF>'
+            # HEAD 태그 전체 추출
+            head_pattern = r'<HEAD.*?</HEAD>'
+            head_match = re.search(head_pattern, source_content, re.DOTALL)
+            
+            if not head_match:
+                return False, "원본 파일에서 HEAD 태그를 찾을 수 없습니다."
+            
+            # HEAD 태그 전체 내용 추출
+            head_content = head_match.group(0)
+            print(f"추출된 HEAD 태그: {head_content[:200]}...")
+            
+            # 원본 파일에서 PAGEDEF 태그 추출
+            pagedef_pattern = r'<PAGEDEF.*?</PAGEDEF>'
             pagedef_match = re.search(pagedef_pattern, source_content, re.DOTALL)
             
             if not pagedef_match:
                 return False, "원본 파일에서 PAGEDEF 태그를 찾을 수 없습니다."
             
-            source_pagedef = pagedef_match.group(0)
+            # PAGEDEF 태그 내용 추출
+            pagedef_content = pagedef_match.group(0)
+            print(f"추출된 PAGEDEF 태그: {pagedef_content}")
             
             # 기본 템플릿 파일 로드
             with open(self.default_template_file, 'r', encoding='utf-8') as f:
                 template_content = f.read()
             
+            # 기본 템플릿의 HEAD 태그를 원본의 HEAD 태그로 교체
+            template_head_pattern = r'<HEAD.*?</HEAD>'
+            template_content = re.sub(template_head_pattern, head_content, template_content, flags=re.DOTALL)
+            
             # 기본 템플릿의 PAGEDEF 태그를 원본의 PAGEDEF 태그로 교체
-            template_content = re.sub(pagedef_pattern, source_pagedef, template_content, flags=re.DOTALL)
+            template_pagedef_pattern = r'<PAGEDEF.*?</PAGEDEF>'
+            template_content = re.sub(template_pagedef_pattern, pagedef_content, template_content, flags=re.DOTALL)
             
             # 수정된 템플릿을 새 파일로 저장
             with open(new_template_path, 'w', encoding='utf-8') as f:
