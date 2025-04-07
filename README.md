@@ -25,7 +25,7 @@ Set-ExecutionPolicy Unrestricted -Scope CurrentUser
 #### 5. pip install -r requirements.txt 명령어를 실행해서 필요한 의존성들을 설치합니다.
 #### 6. 아래의 명령어를 실행합니다.
 ```
-python demo.py
+python run.py
 ```
 #### 7.(선택사항) 보안을 위해 작업이 끝난 후 실행 정책을 원래대로 복구합니다.
 ```
