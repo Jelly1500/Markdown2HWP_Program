@@ -131,7 +131,8 @@ QLabel#OverlayLabel {
 
 /* 헤딩 변경 버튼 스타일 */
 QPushButton[objectName^="HeadingButton"],
-QPushButton[objectName^="SubHeadingButton"] {
+QPushButton[objectName^="SubHeadingButton"],
+QPushButton#DeleteHeadingButton { /* 삭제 버튼 추가 */
     min-width: 28px; /* 최소 너비 조정 */
     max-width: 40px; /* 최대 너비 조정 */
     padding: 3px;    /* 패딩 조정 */
@@ -139,23 +140,80 @@ QPushButton[objectName^="SubHeadingButton"] {
     background-color: rgba(240, 242, 245, 0.8); /* 약간 투명하게 */
     color: #1d1d1f;
     border-radius: 4px; /* 모서리 둥글게 */
+    border: 1px solid transparent; /* 기본 테두리 투명 */
 }
 QPushButton[objectName^="HeadingButton"]:checked {
     background-color: rgba(208, 208, 213, 0.9); /* 눌린 상태 배경색 */
     border: 1px solid #a0a0a5;
 }
-QPushButton[objectName^="SubHeadingButton"]:hover {
+QPushButton[objectName^="SubHeadingButton"]:hover,
+QPushButton#DeleteHeadingButton:hover { /* 삭제 버튼 호버 스타일 추가 */
     background-color: rgba(226, 229, 232, 0.8);
+    border: 1px solid #b0b0b5; /* 호버 시 테두리 */
 }
-QPushButton[objectName^="SubHeadingButton"]:pressed {
+QPushButton[objectName^="SubHeadingButton"]:pressed,
+QPushButton#DeleteHeadingButton:pressed { /* 삭제 버튼 프레스 스타일 추가 */
     background-color: rgba(216, 221, 224, 0.8);
+    border: 1px solid #909095; /* 프레스 시 테두리 */
 }
 
-/* 헤딩 버튼 컨테이너 */
-QWidget#HeadingButtonContainer {
-    background-color: transparent;
+/* 삭제 버튼은 빨간색 텍스트 (선택 사항) */
+QPushButton#DeleteHeadingButton {
+    color: #d9534f; /* 빨간색 계열 */
+    font-weight: bold;
 }
-QWidget#SubHeadingButtonContainer {
+QPushButton#DeleteHeadingButton:hover {
+    color: #c9302c; /* 더 진한 빨강 */
+}
+
+
+/* 포맷 변경 버튼 스타일 (헤딩 버튼과 유사하게) */
+QPushButton[objectName^="FormatButton"],
+QPushButton[objectName^="DeleteFormatButton"] {
+    min-width: 28px;
+    max-width: 40px;
+    padding: 3px;
+    font-size: 9pt;
+    background-color: rgba(240, 242, 245, 0.8);
+    color: #1d1d1f;
+    border-radius: 4px;
+    border: 1px solid transparent;
+}
+QPushButton[objectName^="FormatButton"]:checked {
+    background-color: rgba(208, 208, 213, 0.9);
+    border: 1px solid #a0a0a5;
+}
+QPushButton[objectName^="FormatButton"]:hover,
+QPushButton[objectName^="DeleteFormatButton"]:hover {
+    background-color: rgba(226, 229, 232, 0.8);
+    border: 1px solid #b0b0b5;
+}
+QPushButton[objectName^="FormatButton"]:pressed,
+QPushButton[objectName^="DeleteFormatButton"]:pressed {
+    background-color: rgba(216, 221, 224, 0.8);
+    border: 1px solid #909095;
+}
+
+/* 포맷 삭제 버튼은 빨간색 텍스트 */
+QPushButton[objectName^="DeleteFormatButton"] {
+    color: #d9534f;
+    font-weight: bold;
+}
+QPushButton[objectName^="DeleteFormatButton"]:hover {
+    color: #c9302c;
+}
+
+/* 특정 포맷 버튼 스타일 */
+QPushButton#FormatButtonBold { font-weight: bold; }
+QPushButton#FormatButtonItalic { font-style: italic; }
+/* QPushButton#FormatButtonList { /* 특별한 스타일 없음 */ } */
+
+
+/* 버튼 컨테이너 */
+QWidget#HeadingButtonContainer,
+QWidget#FormatButtonContainer, /* 포맷 컨테이너 추가 */
+QWidget#SubHeadingButtonContainer,
+QWidget#SubFormatButtonContainer { /* 하위 포맷 컨테이너 추가 */
     background-color: transparent;
 }
 """
@@ -173,4 +231,4 @@ QWidget {
 QMainWindow {
     background-color: #1d1d1f;
 }
-""" 
+"""
