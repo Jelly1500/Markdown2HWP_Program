@@ -42,15 +42,28 @@ class MarkdownParser:
         """마크다운에서 YAML 메타데이터 섹션 제거"""
         return re.sub(r'^---\n([\s\S]*?)\n---\n', '', md_text, flags=re.DOTALL)
     
+    def _split_heading_number(self, text):
+        """
+        제목에서 문단 번호와 실제 제목 텍스트를 분리.
+        예: '1.1 예제' → ('1.1', '예제')
+        """
+        match = re.match(r'^\s*(\d+(?:[.-]\d+)*)(?:[).]?)\s*(.+)$', text)
+        if match:
+            return match.group(1), match.group(2).strip()
+        else:
+            return None, text.strip()
+
     def _extract_markdown_elements(self, soup):
         """HTML soup에서 마크다운 요소 추출"""
         elements = []
         
         for tag in soup.find_all(True, recursive=False):
             if tag.name in ['h1', 'h2', 'h3', 'h4', 'h5', 'h6']:
+                heading_num, heading_text = self._split_heading_number(tag.get_text())
                 elements.append({
                     'type': tag.name,
-                    'content': tag.get_text()
+                    'content': heading_text,
+                    'number': heading_num  # ex) "1.2.3" 등
                 })
             elif tag.name == 'p':
                 if tag.find(['strong', 'b', 'em', 'i', 'a']):

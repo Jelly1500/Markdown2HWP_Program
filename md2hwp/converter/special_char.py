@@ -10,6 +10,12 @@ class SpecialCharHandler:
     def __init__(self):
         # 특수 문자 증가를 위한 카운터 저장
         self.special_char_counters = {}
+
+        # 헤딩 계층 구조별 숫자 카운터 (예: h1 -> 1, h2 -> 1.1 ...)
+        self.heading_counters = {
+            'h1': 0, 'h2': 0, 'h3': 0,
+            'h4': 0, 'h5': 0, 'h6': 0
+        }
         
         # 특수 문자 유니코드 매핑
         self.special_char_maps = SPECIAL_CHAR_MAPS
@@ -20,11 +26,24 @@ class SpecialCharHandler:
     def identify_special_char(self, char):
         """특수 문자가 어떤 유형인지 식별하고 정보 반환"""
         code_point = ord(char)
-        
+
+        # ASCII 숫자 처리 ('1' ~ '9')
+        if '1' <= char <= '9':
+            return {
+                'type': 'ascii_digit',
+                'value': int(char),
+                'code_point': code_point,
+                'info': {
+                    'range': (ord('1'), ord('9')),
+                    'base_value': 1,
+                    'max_count': 9
+                }
+            }
+
+        # 기존 특수 문자 매핑 처리
         for char_type, info in self.special_char_maps.items():
             start, end = info['range']
             if start <= code_point <= end:
-                # 특수 문자의 현재 값(숫자나 알파벳 순서) 계산
                 if char_type in ['circled_uppercase', 'circled_lowercase']:
                     value = chr(code_point - start + info['base_value'])
                 else:
@@ -37,6 +56,7 @@ class SpecialCharHandler:
                 }
         
         return None
+    
     
     def increment_special_char(self, char, template_type):
         """특수 문자를 식별하고 증가된 값의 문자 반환 (카운터 초기화 로직 제거)"""
@@ -69,16 +89,9 @@ class SpecialCharHandler:
         start, _ = special_char_info['info']['range']
         next_value = type_counters[char_type]
         
-        if char_type in ['circled_uppercase', 'circled_lowercase']:
-            # 알파벳의 경우 기준 문자(A/a)에서 얼마나 떨어져 있는지 계산
-            base_value = special_char_info['info']['base_value']
-            offset = next_value - 1  # 1부터 시작하므로 1을 빼줌
-            next_code_point = start + offset
-        else:
-            # 숫자의 경우 base_value(대부분 1)에서 얼마나 떨어져 있는지 계산
-            base_value = special_char_info['info']['base_value']
-            offset = next_value - 1  # 1부터 시작하므로 1을 빼줌
-            next_code_point = start + offset
+        # 알파벳/숫자 공통 처리
+        offset = next_value - 1  # 1부터 시작하므로 1을 빼줌
+        next_code_point = start + offset
         
         return chr(next_code_point)
     
@@ -88,9 +101,12 @@ class SpecialCharHandler:
         # 헤딩 계층 구조 처리: 현재 템플릿 타입이 헤딩이면 하위 레벨 카운터 초기화
         if template_type in self.heading_levels:
             current_level_index = self.heading_levels.index(template_type)
-            for level in self.heading_levels[current_level_index + 1:]:
-                if level in self.special_char_counters:
-                    self.special_char_counters[level] = {}
+            type_counters = self.special_char_counters.get(template_type, {})
+
+            for lower_level in self.heading_levels[current_level_index + 1:]:
+                if lower_level in type_counters:
+                    type_counters[lower_level] = 0  # 또는 del type_counters[lower_level]
+
         
         # 모든 <CHAR>...</CHAR> 태그 찾기
         char_pattern = re.compile(r'<CHAR>(.*?)</CHAR>')
@@ -131,4 +147,19 @@ class SpecialCharHandler:
     
     def reset_counters(self):
         """특수 문자 카운터 초기화"""
-        self.special_char_counters = {} 
+        # 초기화 전에 기존 카운터 값 출력
+        print("Before resetting counters:")
+        for template_type, counters in self.special_char_counters.items():
+            print(f"Template Type: {template_type}")
+            for char_type, count in counters.items():
+                print(f"  {char_type}: {count}")
+        
+        # 카운터 초기화
+        self.special_char_counters = {}
+        
+        # 초기화 후 새로 들어오는 카운터 값 출력
+        print("\nAfter resetting counters:")
+        for template_type, counters in self.special_char_counters.items():
+            print(f"Template Type: {template_type}")
+            for char_type, count in counters.items():
+                print(f"  {char_type}: {count}")
