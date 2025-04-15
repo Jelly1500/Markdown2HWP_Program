@@ -82,12 +82,12 @@ class SpecialCharHandler:
         
         return chr(next_code_point)
     
-    def process_special_chars_in_template(self, template, template_type, text):
+    def process_special_chars_in_template(self, template, style_key):
         """템플릿 내의 특수 문자를 처리하여 자동 증가시킴 (하위 헤딩 카운터 초기화 추가)"""
         
-        # 헤딩 계층 구조 처리: 현재 템플릿 타입이 헤딩이면 하위 레벨 카운터 초기화
-        if template_type in self.heading_levels:
-            current_level_index = self.heading_levels.index(template_type)
+        # 헤딩 계층 구조 처리: 현재 스타일 키가 헤딩이면 하위 레벨 카운터 초기화
+        if style_key in self.heading_levels:
+            current_level_index = self.heading_levels.index(style_key)
             for level in self.heading_levels[current_level_index + 1:]:
                 if level in self.special_char_counters:
                     self.special_char_counters[level] = {}
@@ -118,7 +118,8 @@ class SpecialCharHandler:
             for i, char in enumerate(original_content):
                 special_char_info = self.identify_special_char(char)
                 if special_char_info:
-                    next_char = self.increment_special_char(char, template_type)
+                    # Use style_key instead of template_type
+                    next_char = self.increment_special_char(char, style_key) 
                     new_content = new_content[:i] + next_char + new_content[i+1:]
             
             # 내용에 변경이 있으면 교체
@@ -131,4 +132,4 @@ class SpecialCharHandler:
     
     def reset_counters(self):
         """특수 문자 카운터 초기화"""
-        self.special_char_counters = {} 
+        self.special_char_counters = {}
