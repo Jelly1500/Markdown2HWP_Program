@@ -50,6 +50,11 @@ SPECIAL_CHAR_MAPS = {
         'range': (0x2170, 0x217B),  # U+2170 ~ U+217B
         'base_value': 1,  # ⅰ(U+2170) = 1
         'max_count': 12
+    },
+    'arabic_numbers': {  # 아라비아 숫자 0 1 2 ... 9
+        'range': (ord('0'), ord('9')),  # U+0030 ~ U+0039
+        'base_value': 0,  # '0'(U+0030) = 0
+        'max_count': 9  # 0부터 9까지 (최대값)
     }
 }
 
@@ -59,4 +64,4 @@ STYLE_MAPPING_ORDER = [
 ]
 
 # 기본 글머리표
-DEFAULT_BULLET_SYMBOL = "•" 
+DEFAULT_BULLET_SYMBOL = "•"

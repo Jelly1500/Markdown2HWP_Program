@@ -79,7 +79,8 @@ class HWPMLGenerator:
                          h1_structure_to_use = h1_structure_to_use # 원본 사용
 
                 # 헤딩 처리 (원본 또는 수정된 구조 사용)
-                hwpml += self._insert_text_into_template(h1_structure_to_use, element['content'])
+                # Pass element_type as style_key
+                hwpml += self._insert_text_into_template(h1_structure_to_use, element['content'], element_type)
             # ----------------------------------
             elif element_type == 'h2':
                 # h2 태그에 문단 간격이 조정된 ParaShape 적용
@@ -91,16 +92,20 @@ class HWPMLGenerator:
                         f'ParaShape="{margin_para_shape}"',
                         h1_structure_to_use
                     )
-                    hwpml += self._insert_text_into_template(modified_structure, element['content'])
+                    # Pass element_type as style_key
+                    hwpml += self._insert_text_into_template(modified_structure, element['content'], element_type)
                 else:
-                    hwpml += self._insert_text_into_template(h1_structure_to_use, element['content'])
+                    # Pass element_type as style_key
+                    hwpml += self._insert_text_into_template(h1_structure_to_use, element['content'], element_type)
             elif element_type in ['h3', 'h4', 'h5', 'h6']:
-                hwpml += self._insert_text_into_template(h1_structure_to_use, element['content'])
+                # Pass element_type as style_key
+                hwpml += self._insert_text_into_template(h1_structure_to_use, element['content'], element_type)
             elif element_type == 'p':
                 if element.get('has_formatting', False):
                     hwpml += self._convert_formatted_paragraph(element, template_style)
                 else:
-                    hwpml += self._insert_text_into_template(h1_structure_to_use, element['content'])
+                    # Pass element_type as style_key
+                    hwpml += self._insert_text_into_template(h1_structure_to_use, element['content'], element_type)
             elif element_type == 'ul':
                 hwpml += self._convert_list_to_hwpml(element, template_style)
             elif element_type == 'table':
@@ -155,24 +160,13 @@ class HWPMLGenerator:
         
         return hwpml
     
-    def _insert_text_into_template(self, template, text, preserve_prefix=True):
+    def _insert_text_into_template(self, template, text, style_key, preserve_prefix=True):
         """텍스트를 템플릿의 CHAR 태그 내에 삽입"""
         # & 문자를 &amp;로 변환
         text = text.replace('&', '&amp;')
         
-        # 특수 문자 처리
-        template_type = None
-        for style_type, style_info in self.template_manager.template_styles.items():
-            if style_info and style_info.get('structure') == template:
-                template_type = style_type
-                break
-
-        # 템플릿 타입을 찾지 못한 경우 고유 ID 생성
-        if template_type is None:
-            template_type = f"unknown_{hash(template) % 10000}"
-        
-        # 특수 문자 처리
-        template = self.special_char_handler.process_special_chars_in_template(template, template_type, text)
+        # 특수 문자 처리 (스타일 키를 직접 사용)
+        template = self.special_char_handler.process_special_chars_in_template(template, style_key)
         
         # 모든 <CHAR>...</CHAR> 태그 찾기
         char_pattern = re.compile(r'<CHAR>(.*?)</CHAR>')
