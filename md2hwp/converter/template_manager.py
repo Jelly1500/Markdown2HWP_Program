@@ -47,8 +47,7 @@ class TemplateManager:
             if not border_result:
                 print("테이블 테두리 스타일 추가에 실패했습니다. 기본값을 사용합니다.")
             
-            # 여백이 포함된 ParaShape 생성
-            self._create_margin_para_shapes()
+            
             
             return True
         except Exception as e:
@@ -347,31 +346,6 @@ class TemplateManager:
         self.template_content = str(soup)
         return True 
 
-    def _create_margin_para_shapes(self):
-        """여백이 포함된 ParaShape 생성"""
-        soup = BeautifulSoup(self.template_content, 'xml')
-        
-        # PARASHAPELIST 찾기
-        parashape_list = soup.find('PARASHAPELIST')
-        if not parashape_list:
-            print("PARASHAPELIST를 찾을 수 없습니다.")
-            return
-        
-        # 기존 ID 중 가장 큰 값 찾기
-        existing_ids = [int(ps.get('Id', '0')) for ps in parashape_list.find_all('PARASHAPE')]
-        next_id = max(existing_ids) + 1 if existing_ids else 1
-        
-        # h2용 ParaShape (문단 간격 160%)
-        h2_parashape = self._create_parashape_with_spacing(soup, next_id, 160)
-        if h2_parashape:
-            parashape_list.append(h2_parashape)
-            self.margin_para_shapes['h2'] = str(next_id)
-        
-        # Count 속성 업데이트
-        parashape_list['Count'] = str(len(parashape_list.find_all('PARASHAPE')))
-        
-        # 템플릿 내용 업데이트
-        self.template_content = str(soup)
     
     def _create_parashape_with_spacing(self, soup, para_id, line_spacing):
         """문단 간격이 조정된 ParaShape 생성"""

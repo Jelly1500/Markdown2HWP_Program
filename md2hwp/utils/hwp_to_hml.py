@@ -2,6 +2,23 @@ import os
 import win32com.client
 from PyQt5.QtWidgets import QApplication, QFileDialog
 
+def register_security_module(hwp):
+    """한글 프로그램의 보안 경고를 우회하기 위한 모듈 등록"""
+    try:
+        # 현재 스크립트의 위치를 기준으로 상대 경로 계산
+        current_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        dll_path = os.path.join(current_dir, "FilePathCheckerModuleExample.dll")
+        
+        if not os.path.exists(dll_path):
+            print(f"보안 모듈 파일을 찾을 수 없습니다: {dll_path}")
+            return False
+            
+        hwp.RegisterModule("FilePathCheckDLL", "SecurityModule", dll_path)
+        return True
+    except Exception as e:
+        print(f"보안 모듈 등록 실패: {str(e)}")
+        return False
+
 # 파일 탐색기로 hwp 파일 경로 선택
 def get_hwp_file_path():
     app = QApplication([])
@@ -26,7 +43,7 @@ def convert_hwp_to_hml(file_path):
 
     # 한글 객체 생성
     hwp = win32com.client.Dispatch("HWPFrame.HwpObject")
-    hwp.RegisterModule("FilePathCheckDLL", "SecurityModule")  # 보안 DLL 등록 (필요 시)
+    register_security_module(hwp)  # 보안 모듈 등록
     
     # HWP 파일 열기
     hwp.Open(hwp_path, "HWP", "")
@@ -55,7 +72,7 @@ def convert_hml_to_hwp(file_path):
 
     # 한글 객체 생성
     hwp = win32com.client.Dispatch("HWPFrame.HwpObject")
-    hwp.RegisterModule("FilePathCheckDLL", "SecurityModule")  # 보안 DLL 등록 (필요 시)
+    register_security_module(hwp)  # 보안 모듈 등록
     
     # HML 파일 열기
     hwp.Open(hml_path, "HWPML2X", "")

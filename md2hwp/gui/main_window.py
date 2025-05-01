@@ -233,7 +233,7 @@ class MainWindow(QMainWindow):
         self.delete_heading_button = QPushButton("X")
         self.delete_heading_button.setFixedSize(32, 25)
         self.delete_heading_button.setObjectName("DeleteHeadingButton")
-        self.delete_heading_button.setToolTip("선택된 레벨의 모든 헤딩 마커 삭제") # 툴팁 수정
+        self.delete_heading_button.setToolTip("선택된 레벨의 모든 헤딩 마커 삭제") # 툴크 수정
         self.delete_heading_button.clicked.connect(self.on_delete_heading_button_clicked)
         self.sub_heading_layout.addWidget(self.delete_heading_button)
 
@@ -436,16 +436,12 @@ class MainWindow(QMainWindow):
             hwpml_content = self.converter.convert_md_to_hwpml(md_text)
             save_text_file(current_output_path, hwpml_content, encoding=DEFAULT_ENCODING)
             
-            # HML을 HWP로 변환
-            from md2hwp.utils.hwp_to_hml import convert_hml_to_hwp
+            # HML 파일의 확장자를 HWP로 변경
             hwp_path = os.path.splitext(current_output_path)[0] + ".hwp"
             
-            # HML을 HWP로 변환
-            convert_hml_to_hwp(current_output_path)
-            
-            # HML 파일 삭제
+            # HML 파일을 HWP로 이름 변경
             if os.path.exists(current_output_path):
-                os.remove(current_output_path)
+                os.rename(current_output_path, hwp_path)
             
             # 출력 경로를 HWP 파일로 업데이트
             self.output_path = hwp_path
@@ -988,21 +984,13 @@ class MainWindow(QMainWindow):
     def create_template_from_source(self):
         """원본 문서 설정이 적용된 새 템플릿 생성"""
         try:
-            # 사용자로부터 원본 HWP 파일 선택
+            # 사용자로부터 원본 HML 파일 선택
             source_path, _ = QFileDialog.getOpenFileName(
-                self, "원본 HWP 파일 선택",
-                "", "HWP 파일 (*.hwp)"
+                self, "원본 HML 파일 선택",
+                "", "HML 파일 (*.hml)"
             )
 
             if not source_path:
-                return
-
-            # HWP를 HML로 변환
-            from md2hwp.utils.hwp_to_hml import convert_hwp_to_hml
-            hml_path = convert_hwp_to_hml(source_path)
-            
-            if not hml_path:
-                QMessageBox.critical(self, "오류", "HWP 파일을 HML로 변환하는데 실패했습니다.")
                 return
 
             # 사용자로부터 새 템플릿 이름 입력 받기
@@ -1013,17 +1001,10 @@ class MainWindow(QMainWindow):
             )
 
             if not ok or not template_name:
-                # 템플릿 생성이 취소된 경우 임시 HML 파일 삭제
-                if os.path.exists(hml_path):
-                    os.remove(hml_path)
                 return
 
             # 템플릿 생성
-            success, message = self.converter.template_manager.create_template_from_source(hml_path, template_name)
-
-            # 템플릿 생성 후 임시 HML 파일 삭제
-            if os.path.exists(hml_path):
-                os.remove(hml_path)
+            success, message = self.converter.template_manager.create_template_from_source(source_path, template_name)
 
             if success:
                 QMessageBox.information(self, "성공", message)
