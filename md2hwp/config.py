@@ -65,3 +65,8 @@ STYLE_MAPPING_ORDER = [
 
 # 기본 글머리표
 DEFAULT_BULLET_SYMBOL = "•"
+
+LICENSE_SERVER_URL = "https://validate-license-xrrzxuc2hq-uc.a.run.app"
+LICENSE_FILE_PATH = "license.dat" 
+LICENSE_CHECK_INTERVAL_DAYS = 7 
+
