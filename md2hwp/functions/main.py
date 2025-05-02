@@ -8,9 +8,6 @@ from datetime import timezone # 표준 라이브러리 사용
 import json # JSON 응답 생성을 위해
 from flask import Flask, jsonify
 
-# --- Firebase Admin SDK 초기화 (전역 범위에서 단순하게 시도) ---
-# 기본 예제가 이렇게 작동했으므로 다시 시도해봅니다.
-# 만약 이 방식으로 또 Timeout 오류가 발생하면 지연 초기화 로직을 다시 고려해야 합니다.
 try:
     initialize_app()
 except ValueError:
