@@ -14,7 +14,7 @@ except ValueError:
     pass # 이미 초기화된 경우 무시
 # --------------------------------------------------------
 
-@https_fn.on_request()
+@https_fn.on_request(max_instances=10)
 def validate_license(req: https_fn.Request) -> https_fn.Response:
     """라이선스 검증 HTTP Cloud Function (firebase_functions SDK 사용)"""
     # CORS 설정 (필요시)
