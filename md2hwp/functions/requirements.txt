@@ -1,0 +1,5 @@
+# functions/requirements.txt 내용 예시
+firebase-admin>=6.0.0
+Flask>=2.0.0
+google-cloud-firestore
+firebase-functions

@@ -1,0 +1,143 @@
+# md2hwp/utils/license_utils.py
+import json
+import datetime
+import requests
+import keyring # Keyring 라이브러리 임포트
+
+# 설정값(서버 URL) 및 machine_id 함수 임포트
+try:
+    # config.py 에서 서버 URL 가져오기 (LICENSE_FILE_PATH는 더 이상 사용 안 함)
+    from ..config import LICENSE_SERVER_URL
+    # machine_info.py 에서 get_machine_id 함수 가져오기 (위에서 수정한 버전)
+    from .machine_info import get_machine_id
+except ImportError as e:
+    print(f"CRITICAL ERROR: config 또는 machine_info 모듈 임포트 실패 (license_utils.py): {e}")
+    # !!! 중요: 아래 URL은 실제 동작하는 URL로 반드시 교체해야 합니다 !!!
+    LICENSE_SERVER_URL = "YOUR_FIREBASE_FUNCTION_URL_HERE"
+    print(f"WARNING: Using placeholder LICENSE_SERVER_URL: {LICENSE_SERVER_URL}")
+    # get_machine_id 임시 정의 (오류 발생 가능성 높음)
+    def get_machine_id():
+        print("ERROR: get_machine_id could not be imported!")
+        return "import_error_machine_id" + str(datetime.datetime.now().timestamp()) # 고유성 시도
+
+SERVICE_NAME = "MD2HWPConverterLicense" # 다른 앱과 충돌하지 않는 고유한 서비스 이름
+USERNAME = "license_data"           # 이 서비스 내에서 라이선스 데이터를 식별하는 키
+
+def save_license_info(license_data: dict):
+    """라이선스 정보(dict)를 Windows 자격 증명 관리자에 저장"""
+    if not isinstance(license_data, dict):
+         print("ERROR [LicenseUtils]: save_license_info에는 dict 타입만 저장 가능합니다.")
+         return False
+    try:
+        data_str = json.dumps(license_data, ensure_ascii=False)
+        keyring.set_password(SERVICE_NAME, USERNAME, data_str)
+        print("INFO [LicenseUtils]: 라이선스 정보가 자격 증명 관리자에 안전하게 저장되었습니다.")
+        return True
+    except Exception as e:
+        print(f"ERROR [LicenseUtils]: 자격 증명 저장 실패: {e}")
+        return False
+
+def load_license_info() -> dict | None:
+    """Windows 자격 증명 관리자에서 라이선스 정보(dict) 로드"""
+    try:
+        data_str = keyring.get_password(SERVICE_NAME, USERNAME)
+        if data_str:
+            license_data = json.loads(data_str)
+            print("INFO [LicenseUtils]: 자격 증명 관리자에서 라이선스 정보를 로드했습니다.")
+            return license_data
+        else:
+            print("INFO [LicenseUtils]: 저장된 라이선스 정보가 없습니다.")
+            return None
+    except json.JSONDecodeError as e:
+         print(f"ERROR [LicenseUtils]: 저장된 라이선스 데이터 형식 오류 (JSON 파싱 실패): {e}. 저장된 정보 삭제 시도.")
+         delete_license_info() 
+         return None
+    except Exception as e:
+        print(f"ERROR [LicenseUtils]: 자격 증명 로드 실패: {e}")
+        return None
+
+def delete_license_info():
+    """Windows 자격 증명 관리자에서 라이선스 정보 삭제"""
+    try:
+        keyring.delete_password(SERVICE_NAME, USERNAME)
+        print("INFO [LicenseUtils]: 자격 증명 관리자에서 라이선스 정보를 삭제했습니다.")
+        return True
+    except keyring.errors.PasswordDeleteError:
+        print("INFO [LicenseUtils]: 삭제할 저장된 라이선스 정보가 없습니다.")
+        return True
+    except Exception as e:
+        print(f"ERROR [LicenseUtils]: 자격 증명 삭제 실패: {e}")
+        return False
+
+def validate_license_on_server(license_key: str) -> dict:
+    """라이선스 키를 서버(Cloud Function)에서 검증"""
+    if not LICENSE_SERVER_URL or "YOUR_FIREBASE_FUNCTION_URL" in LICENSE_SERVER_URL:
+        print("CRITICAL ERROR [LicenseUtils]: 라이선스 서버 URL이 설정되지 않았습니다!")
+        return {"status": "error", "message": "라이선스 서버 URL 미설정"}
+
+    machine_id = get_machine_id() 
+    if not license_key:
+         return {"status": "error", "message": "라이선스 키가 제공되지 않았습니다."}
+    if not machine_id or "error" in machine_id or "fallback" in machine_id:
+         print(f"WARN [LicenseUtils]: 유효한 Machine ID 생성 실패 ('{machine_id}'). 검증은 시도하나 문제가 발생할 수 있습니다.")
+
+    payload = {"license_key": license_key, "machine_id": machine_id}
+    headers = {"Content-Type": "application/json"}
+
+    try:
+        print(f"INFO [LicenseUtils]: 서버({LICENSE_SERVER_URL})로 라이선스 검증 요청...")
+        print(f"DEBUG [LicenseUtils]: Payload - {payload}")
+        response = requests.post(LICENSE_SERVER_URL, json=payload, headers=headers, timeout=20) # json 파라미터 사용 추천
+
+        print(f"INFO [LicenseUtils]: 서버 응답 상태 코드: {response.status_code}")
+
+        if not response.ok:
+            error_message = f"서버 오류 발생 (코드: {response.status_code})"
+            try:
+                error_data = response.json()
+                server_msg = error_data.get("message", "서버에서 추가 메시지 없음")
+                print(f"DEBUG [LicenseUtils]: Server error response: {error_data}")
+
+                if response.status_code == 403:
+                    if "invalid_key" in server_msg: error_message = "입력하신 라이선스 키가 유효하지 않습니다."
+                    elif "limit_reached" in server_msg: error_message = "라이선스 활성화 횟수를 초과했습니다."
+                    elif "expired_key" in server_msg: error_message = "라이선스가 만료되었습니다."
+                    elif "inactive_key" in server_msg: error_message = "라이선스가 활성 상태가 아닙니다."
+                    else: error_message = f"라이선스 접근 거부됨: {server_msg}"
+                elif response.status_code >= 500: error_message = "라이선스 서버 내부 오류 발생. 잠시 후 다시 시도해주세요."
+                elif response.status_code == 400: error_message = f"잘못된 요청입니다: {server_msg}"
+                elif response.status_code == 404: error_message = "라이선스 서버 경로를 찾을 수 없습니다."
+                else: error_message = f"오류 ({response.status_code}): {server_msg}"
+
+            except json.JSONDecodeError:
+                print("WARN [LicenseUtils]: 서버 오류 응답이 JSON 형식이 아닙니다.")
+                error_message = f"서버 오류 (코드: {response.status_code}, 응답 형식 오류)"
+            except Exception as parse_err:
+                print(f"ERROR [LicenseUtils]: 서버 오류 응답 처리 중 예외: {parse_err}")
+                error_message = f"서버 오류 응답 처리 오류 (코드: {response.status_code})"
+
+            print(f"ERROR [LicenseUtils]: {error_message}")
+            return {"status": "error", "message": error_message}
+
+        try:
+             result = response.json()
+             print(f"DEBUG [LicenseUtils]: Server success response: {result}")
+             return result
+        except json.JSONDecodeError:
+             print("ERROR [LicenseUtils]: 서버 성공 응답이 유효한 JSON 형식이 아닙니다.")
+             return {"status": "error", "message": "서버로부터 잘못된 형식의 응답을 받았습니다."}
+
+    except requests.exceptions.Timeout:
+        print("ERROR [LicenseUtils]: 라이선스 서버 연결 시간 초과")
+        return {"status": "error", "message": "라이선스 서버 연결 시간 초과"}
+    except requests.exceptions.ConnectionError as e:
+         print(f"ERROR [LicenseUtils]: 라이선스 서버 연결 실패: {e}. 네트워크 또는 서버 주소를 확인하세요.")
+         return {"status": "error", "message": "라이선스 서버에 연결할 수 없습니다."}
+    except requests.exceptions.RequestException as e:
+        print(f"ERROR [LicenseUtils]: 라이선스 서버 통신 중 오류 발생: {e}")
+        return {"status": "error", "message": f"서버 통신 오류: {e}"}
+    except Exception as e:
+        print(f"CRITICAL ERROR [LicenseUtils]: 예상치 못한 오류 발생: {e}")
+        import traceback
+        traceback.print_exc()
+        return {"status": "error", "message": f"검증 중 알 수 없는 오류 발생: {e}"}
