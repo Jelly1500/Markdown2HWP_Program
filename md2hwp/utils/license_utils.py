@@ -3,6 +3,7 @@ import json
 import datetime
 import requests
 import keyring 
+import winreg  # 윈도우 레지스트리 접근을 위한 모듈 추가
 
 try:
     from ..config import LICENSE_SERVER_URL, API_GATEWAY_KEY
@@ -18,6 +19,33 @@ except ImportError as e:
 
 SERVICE_NAME = "MD2HWPConverterLicense" 
 USERNAME = "license_data"          
+PUBLISHER = "사하구청"  # 레지스트리 키 접근에 사용 (installer.iss와 동일해야 함)
+APP_NAME = "마크다운 HWP 변환기"  # 레지스트리 키 접근에 사용 (installer.iss와 동일해야 함)
+REG_KEY = f"SOFTWARE\\{PUBLISHER}\\{APP_NAME}"
+
+def get_registry_license_key():
+    """레지스트리에 저장된 라이선스 키를 가져옵니다."""
+    try:
+        # 먼저 HKLM(로컬 시스템) 확인
+        try:
+            key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, REG_KEY)
+            license_key = winreg.QueryValueEx(key, "LicenseKey")[0]
+            winreg.CloseKey(key)
+            print("INFO [LicenseUtils]: HKLM 레지스트리에서 라이선스 키를 불러왔습니다.")
+            return license_key
+        except FileNotFoundError:
+            # HKLM에 없으면 HKCU(현재 사용자) 확인
+            key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, REG_KEY)
+            license_key = winreg.QueryValueEx(key, "LicenseKey")[0]
+            winreg.CloseKey(key)
+            print("INFO [LicenseUtils]: HKCU 레지스트리에서 라이선스 키를 불러왔습니다.")
+            return license_key
+    except FileNotFoundError:
+        print("INFO [LicenseUtils]: 레지스트리에 라이선스 키가 없습니다.")
+        return None
+    except Exception as e:
+        print(f"ERROR [LicenseUtils]: 레지스트리에서 라이선스 키 로드 실패: {e}")
+        return None
 
 def save_license_info(license_data: dict):
     """라이선스 정보(dict)를 Windows 자격 증명 관리자에 저장"""
@@ -34,7 +62,19 @@ def save_license_info(license_data: dict):
         return False
 
 def load_license_info() -> dict | None:
-    """Windows 자격 증명 관리자에서 라이선스 정보(dict) 로드"""
+    """Windows 자격 증명 관리자에서 라이선스 정보(dict) 로드
+    또는 설치 과정에서 레지스트리에 저장된 키가 있으면 그것을 사용"""
+    # 먼저 레지스트리에서 라이선스 키 확인
+    license_key = get_registry_license_key()
+    if license_key and license_key == "TEST-KEY-1234-ABCD":  # 하드코딩된 테스트 키와 비교
+        print("INFO [LicenseUtils]: 레지스트리에서 유효한 라이선스 키를 찾았습니다.")
+        # 라이선스 키를 자격 증명 관리자에도 저장하여 추후 검증 절차 간소화
+        current_time = datetime.datetime.now()
+        license_info = {"key": license_key, "last_checked": current_time.isoformat()}
+        save_license_info(license_info)
+        return license_info
+    
+    # 레지스트리에 유효한 키가 없으면 자격 증명 관리자 확인
     try:
         data_str = keyring.get_password(SERVICE_NAME, USERNAME)
         if data_str:
@@ -66,7 +106,13 @@ def delete_license_info():
         return False
 
 def validate_license_on_server(license_key: str) -> dict:
-    """라이선스 키를 서버(API Gateway)에서 검증 (API 키 포함)"""
+    """라이선스 키를 서버(API Gateway)에서 검증 (API 키 포함)
+    테스트 키(TEST-KEY-1234-ABCD)의 경우 서버 검증 없이 유효한 것으로 처리"""
+    # 테스트 키인 경우 서버 검증 없이 유효하다고 처리
+    if license_key == "TEST-KEY-1234-ABCD":
+        print("INFO [LicenseUtils]: 테스트 키를 감지했습니다. 유효한 것으로 처리합니다.")
+        return {"status": "valid", "message": "테스트 키 확인됨"}
+    
     if not LICENSE_SERVER_URL or "YOUR_FIREBASE_FUNCTION_URL" in LICENSE_SERVER_URL: 
         print("CRITICAL ERROR [LicenseUtils]: 라이선스 서버 URL(API Gateway URL)이 설정되지 않았습니다!")
         return {"status": "error", "message": "라이선스 서버 URL 미설정"}

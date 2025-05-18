@@ -10,3 +10,4 @@ pillow>=10.0.0
 PyQt5>=5.15.9
 requests>=2.31.0
 keyring>=24.3.0
+zstandard>=0.22.0

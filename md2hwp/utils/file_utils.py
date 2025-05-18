@@ -4,6 +4,7 @@
 import os
 import datetime
 import io
+import sys
 
 import platform  # 추가
 import subprocess # 추가
@@ -25,9 +26,45 @@ explorer_handles = {
 
 def ensure_directory(directory_path):
     """디렉토리가 존재하지 않으면 생성"""
-    if not os.path.exists(directory_path):
-        os.makedirs(directory_path)
-    return directory_path
+    try:
+        if not os.path.exists(directory_path):
+            os.makedirs(directory_path, exist_ok=True)
+        return directory_path
+    except PermissionError:
+        # 권한 오류 발생 시 사용자 문서 폴더 하위에 대체 경로 생성
+        user_docs = get_user_documents_path()
+        app_name = os.path.basename(directory_path)
+        alt_path = os.path.join(user_docs, "마크다운_HWP_변환기", app_name)
+        try:
+            if not os.path.exists(alt_path):
+                os.makedirs(alt_path, exist_ok=True)
+            print(f"권한 문제로 인해 대체 경로를 사용합니다: {alt_path}")
+            return alt_path
+        except Exception as e:
+            # 임시 폴더로 대체 (최후의 수단)
+            temp_path = os.path.join(os.path.expanduser("~"), "AppData", "Local", "Temp", "마크다운_HWP_변환기", app_name)
+            os.makedirs(temp_path, exist_ok=True)
+            print(f"임시 폴더로 대체합니다: {temp_path}")
+            return temp_path
+    except Exception as e:
+        print(f"디렉토리 생성 오류: {e}")
+        # 임시 폴더로 대체
+        temp_path = os.path.join(os.path.expanduser("~"), "AppData", "Local", "Temp", "마크다운_HWP_변환기")
+        os.makedirs(temp_path, exist_ok=True)
+        return temp_path
+
+def get_user_documents_path():
+    """사용자 문서 폴더 경로 반환"""
+    if platform.system() == "Windows":
+        import ctypes.wintypes
+        CSIDL_PERSONAL = 5  # 내 문서
+        SHGFP_TYPE_CURRENT = 0  # 현재 경로
+        buf = ctypes.create_unicode_buffer(ctypes.wintypes.MAX_PATH)
+        ctypes.windll.shell32.SHGetFolderPathW(None, CSIDL_PERSONAL, None, SHGFP_TYPE_CURRENT, buf)
+        return buf.value
+    else:
+        # macOS, Linux 등에서는 사용자 홈 디렉토리 사용
+        return os.path.join(os.path.expanduser("~"), "Documents")
 
 def generate_output_filename(output_dir, prefix="converted", extension=".hml"):
     """타임스탬프가 포함된 출력 파일명 생성"""
@@ -36,9 +73,28 @@ def generate_output_filename(output_dir, prefix="converted", extension=".hml"):
 
 def save_text_file(file_path, content, encoding="utf-8"):
     """텍스트 파일 저장"""
-    with io.open(file_path, "w", encoding=encoding) as f:
-        f.write(content)
-    return file_path
+    try:
+        with io.open(file_path, "w", encoding=encoding) as f:
+            f.write(content)
+        return file_path
+    except PermissionError:
+        # 권한 문제가 발생한 경우 사용자 문서 폴더에 저장 시도
+        user_docs = get_user_documents_path()
+        alt_path = os.path.join(user_docs, "마크다운_HWP_변환기", os.path.basename(file_path))
+        os.makedirs(os.path.dirname(alt_path), exist_ok=True)
+        with io.open(alt_path, "w", encoding=encoding) as f:
+            f.write(content)
+        print(f"원본 경로에 저장할 수 없어 대체 경로에 저장했습니다: {alt_path}")
+        return alt_path
+    except Exception as e:
+        print(f"파일 저장 오류: {e}")
+        # 임시 폴더에 저장 시도
+        temp_path = os.path.join(os.path.expanduser("~"), "AppData", "Local", "Temp", "마크다운_HWP_변환기", os.path.basename(file_path))
+        os.makedirs(os.path.dirname(temp_path), exist_ok=True)
+        with io.open(temp_path, "w", encoding=encoding) as f:
+            f.write(content)
+        print(f"임시 폴더에 저장했습니다: {temp_path}")
+        return temp_path
 
 def open_file(file_path):
     """파일 열기 시도"""
