@@ -91,11 +91,23 @@ def setup_tray():
         if window and window_visible:
             window.hide()
             window_visible = False
+        
+        # 모든 리소스 확실히 해제
+        try:
+            keyboard.unhook_all()
+        except Exception as e:
+            print(f"단축키 리소스 해제 중 오류: {e}")
+        
+        # 트레이 아이콘 중지
         icon.stop()     
+        
+        # 파이썬 프로세스 완전히 종료
         if app:         
             app.quit() 
-        else:
-            print("경고: QApplication 인스턴스가 없어 app.quit()을 호출할 수 없습니다.")
+            app.processEvents()  # 남아있는 이벤트 처리
+        
+        # 강제 종료 설정
+        os._exit(0)
 
     def on_show(icon, item):
         """트레이 메뉴 '창 열기/닫기' 클릭 시 호출될 함수"""
@@ -130,6 +142,9 @@ def main():
         event.ignore() 
     window.closeEvent = override_close_event
 
+    # 안전한 종료를 위한 이벤트 처리
+    app.aboutToQuit.connect(lambda: keyboard.unhook_all())
+
     setup_hotkey()
 
     setup_tray()
@@ -139,6 +154,7 @@ def main():
 
     exit_code = app.exec()
 
+    # 프로그램 종료 시 모든 리소스 확실히 해제
     if tray_icon and tray_icon.visible:
         tray_icon.stop()
     try:

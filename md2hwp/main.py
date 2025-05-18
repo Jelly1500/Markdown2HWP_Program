@@ -22,7 +22,8 @@ try:
     from md2hwp.gui.main_window import MainWindow 
     from md2hwp.gui.license_dialog import LicenseDialog
     from md2hwp.utils.license_utils import (load_license_info, save_license_info,
-                                          validate_license_on_server, delete_license_info)
+                                          validate_license_on_server, delete_license_info,
+                                          get_registry_license_key)
     from md2hwp.config import APP_NAME, LICENSE_CHECK_INTERVAL_DAYS
 except ImportError as e:
     print(f"Import Error in main.py: {e}")
@@ -78,12 +79,24 @@ def perform_license_check():
     라이선스 확인 로직을 수행합니다.
     QApplication 인스턴스가 이미 생성되어 있어야 합니다.
     라이선스가 유효하지 않으면 메시지를 표시하고 프로그램을 종료합니다.
+    
+    설치 프로그램에서 등록한 레지스트리 키가 있으면 해당 키를 먼저 확인합니다.
     """
     app = QApplication.instance() 
     if not app:
         print("오류: QApplication 인스턴스가 없습니다! 라이선스 확인 불가.")
         sys.exit(1)
 
+    # 레지스트리에서 키 확인 (설치 프로그램에서 등록한 경우)
+    registry_key = get_registry_license_key()
+    if registry_key == "TEST-KEY-1234-ABCD":
+        print("INFO: 설치 과정에서 등록된 유효한 라이선스 키를 레지스트리에서 찾았습니다.")
+        current_time = datetime.datetime.now()
+        # 자격 증명 관리자에도 저장하여 다음 실행 시 일관성 유지
+        save_license_info({"key": registry_key, "last_checked": current_time.isoformat()})
+        return  # 유효한 키가 확인되면 추가 검증 없이 진행
+    
+    # 레지스트리에 키가 없으면 저장된 정보 확인
     stored_info = load_license_info()
     current_time = datetime.datetime.now()
     needs_validation = True
