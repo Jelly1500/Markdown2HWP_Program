@@ -3,7 +3,7 @@ name: 버그 리포트 템플릿
 about: 버그 발생 시 사용하는 템플릿입니다
 title: "버그 리포트: &lt;br&gt; 태그 사용으로 인한 줄바꿈 미처리"
 labels: "🐞 BUG"
-assignees: bum103103, 김범준준
+assignees: bum103103, 김범준
 ---
 
 # 버그 리포트
