@@ -3,7 +3,7 @@ name: 버그 리포트 템플릿
 about: 표 안의 표 구조 변환 오류
 title: "중첩 테이블 변환 버그 리포트"
 labels: "🐛 BUG"
-assignees: ""
+assignees: bum103103, 김범준
 
 ---
 
