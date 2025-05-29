@@ -19,11 +19,15 @@ assignees:
    - Python: 3.12
 
 2. 테스트를 수행한 마크다운 문서:
-   ```markdown
-   ```
-    [데이터 수집] → [데이터 저장(DB)] → [API 제공] → [웹 기반 시각화 도구]
-    ```
-   ```
+```
+```json
+{
+  "frontend": "JSP / jQuery",
+  "backend": "Spring MVC",
+  "database": "Oracle 11g"
+}```
+```
+   
 
 3. 사용했던 템플릿: 
    - template_ex_01.hml
