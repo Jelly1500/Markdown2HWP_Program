@@ -4,8 +4,8 @@ __pycache__/
 *$py.class
 
 # Converted documents
-convertedDocs/*
-!convertedDocs/.gitkeep
+md2hwp/convertedDocs/*
+!md2hwp/convertedDocs/.gitkeep
 
 # C extensions
 *.so
