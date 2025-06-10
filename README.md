@@ -1,4 +1,8 @@
 ## 프로그램 실행 방법
+### 프로그램 실행 전에 준비해야 할 사항
+https://developer.hancom.com/hwpautomation
+위 웹사이트에서 보안 모듈 해제에 대한 설명을 그대로 따라서 해야 오류가 없습니다.
+
 #### 1. python 3.13.x 버전을 설치합니다.(해당 버전으로 통일 예정)
 #### 2. 다음 명령어를 사용하여 해당 프로젝트를 로컬에 복제합니다.
 git clone https://github.com/Jelly1500/Markdown2HWP_Program.git
