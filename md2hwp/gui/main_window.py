@@ -2,8 +2,8 @@
 import os
 import io
 import sys
-import datetime
 import re
+import traceback
 # QtWidgets에서 필요한 클래스들을 가져옵니다.
 from PySide6.QtWidgets import (QMainWindow, QTextEdit, QPushButton, QFileDialog, # <- QTextEdit 여기로 이동
                               QVBoxLayout, QHBoxLayout, QWidget, QStatusBar, QApplication,
@@ -17,8 +17,16 @@ from PySide6.QtGui import (QIcon, QPalette, QColor, QDragEnterEvent, QDropEvent,
 from .status_handler import StatusHandler
 from ..config import APP_NAME, OUTPUT_DIR_NAME, DEFAULT_ENCODING
 from ..utils.file_utils import ensure_directory, generate_output_filename, save_text_file, open_file, open_file_explorer
+from ..utils.create_template_images import create_template_images
 # 스타일시트 가져오기
 from .styles import IOS_LIKE_QSS
+
+from ..utils.create_template_images import create_template_images
+from ..utils.GetHmlTags import extract_meaningful_p_tags
+from ..utils.deleteFolder import delete_folder_contents_permanently
+from ..converter.test import MainWindow as MappingWindow 
+
+from PySide6.QtCore import Qt, QEvent, QTimer, QRegularExpression, QPropertyAnimation, QEasingCurve, QSize, QThread, QObject, Signal
 
 
 def get_base_path():
@@ -33,6 +41,41 @@ def get_base_path():
         return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 BASE_PATH = get_base_path()
+
+# --- [신규] 백그라운드 작업을 위한 Worker 클래스 ---
+class TemplateCreationWorker(QObject):
+    finished = Signal(str, list, str)  # source_path, p_tags_list, error_string
+
+    def __init__(self, source_path, split_hml_dir, image_dir, cropped_image_dir):
+        super().__init__()
+        self.source_path = source_path
+        self.split_hml_dir = split_hml_dir
+        self.image_dir = image_dir
+        self.cropped_image_dir = cropped_image_dir
+
+    def run(self):
+        try:
+            print("백그라운드 작업 시작: 템플릿 이미지 생성...")
+            create_template_images(
+                template_path=self.source_path,
+                split_hml_dir=self.split_hml_dir,
+                image_dir=self.image_dir,
+                cropped_image_dir=self.cropped_image_dir
+            )
+            print("백그라운드 작업: P태그 추출...")
+            p_tags_list = extract_meaningful_p_tags(self.source_path)
+            
+            if not p_tags_list:
+                raise ValueError("문서에서 유효한 문단을 추출하지 못했습니다.")
+            self.finished.emit(self.source_path, p_tags_list, "")
+
+            
+        except Exception as e:
+            traceback.print_exc()
+            self.finished.emit(self.source_path, [], str(e))
+
+        print("모든 작업 완료!")
+
 class MainWindow(QMainWindow):
     """GUI 메인 창 클래스 (헤딩 및 포맷 변경 기능 추가)"""
 
@@ -43,14 +86,23 @@ class MainWindow(QMainWindow):
         self.template_path = ""
         self.output_path = None
         self.is_converting = False
+        self.processing_msg_box = None
+        self.mapping_window = None
 
         # --- 기본 폴더 및 템플릿 경로 설정 ---
         try:
             self.default_output_dir = os.path.join(BASE_PATH, "convertedDocs")
             self.default_template_dir = os.path.join(BASE_PATH, "new_template") # 폴더 이름 수정 (template -> new_template)
+            self.default_split_hml_dir = os.path.join(BASE_PATH, "output_split_hml")    # 템플릿 이미지 생성 시 사용되는 폴더(분할 hml 문서)
+            self.default_image_dir = os.path.join(BASE_PATH, "images")                  # 템플릿 이미지 생성 시 사용되는 폴더(원본 이미지)
+            self.default_cropped_image_dir = os.path.join(BASE_PATH, "Cropped_Images")  # 템플릿 이미지 생성 시 사용되는 폴더(최종 크롭 이미지)
             self.default_template_file = os.path.join(self.default_template_dir, "템플릿문서.hml")
 
             ensure_directory(self.default_output_dir)
+            ensure_directory(self.default_template_dir)
+            ensure_directory(self.default_split_hml_dir)
+            ensure_directory(self.default_image_dir)
+            ensure_directory(self.default_cropped_image_dir)
         except Exception as e:
             print(f"경고: 기본 폴더 경로 설정 중 오류 발생 - {e}")
             self.default_output_dir = ensure_directory(os.path.abspath("convertedDocs"))
@@ -982,37 +1034,82 @@ class MainWindow(QMainWindow):
             )
 
     def create_template_from_source(self):
-        """원본 문서 설정이 적용된 새 템플릿 생성"""
+        """[최종 수정] Worker 스레드를 사용하여 전체 템플릿 생성 워크플로우를 시작합니다."""
+        source_path, _ = QFileDialog.getOpenFileName(self, "원본 HML 파일 선택", "", "HML 파일 (*.hml)")
+        if not source_path:
+            return
+
+        # 1. 처리 중 메시지 박스를 띄우고 메인 UI를 비활성화합니다.
+        self.processing_msg_box = QMessageBox()
+        self.processing_msg_box.setWindowTitle("처리 중")
+        self.processing_msg_box.setText("원본 문서에서 이미지와 문단을 추출하고 있습니다.\n잠시만 기다려 주세요...")
+        self.processing_msg_box.setStandardButtons(QMessageBox.StandardButton.NoButton)
+        self.processing_msg_box.show()
+        self.setEnabled(False)
+        QApplication.processEvents()
+
+        # 2. QThread와 Worker 객체를 생성하고 시작합니다.
+        self.thread = QThread()
+        self.worker = TemplateCreationWorker(
+            source_path=source_path,
+            split_hml_dir=self.default_split_hml_dir,
+            image_dir=self.default_image_dir,
+            cropped_image_dir=self.default_cropped_image_dir
+        )
+        self.worker.moveToThread(self.thread)
+        self.thread.started.connect(self.worker.run)
+        self.worker.finished.connect(self.on_preprocessing_finished)
+        self.worker.finished.connect(self.thread.quit)
+        self.worker.finished.connect(self.worker.deleteLater)
+        self.thread.finished.connect(self.thread.deleteLater)
+        self.thread.start()
+
+    def on_preprocessing_finished(self, source_path, p_tags_list, error_string):
+        print("on_preprocessing_finished")
+        """[신규] 이미지/P태그 추출(전처리)이 완료되면 호출될 슬롯."""
+
+        # ★★★ 해결 1: '처리 중' 메시지 박스를 여기서 먼저 닫습니다. ★★★
+        if self.processing_msg_box is not None:
+            print("processing_msg_box 삭제하기")
+            self.processing_msg_box.close()
+            self.processing_msg_box = None
+
+        if error_string:
+            self.setEnabled(True)
+            QMessageBox.critical(self, "오류", f"템플릿 생성 준비 중 오류가 발생했습니다:\n{error_string}")
+            return
+
         try:
-            # 사용자로부터 원본 HML 파일 선택
-            source_path, _ = QFileDialog.getOpenFileName(
-                self, "원본 HML 파일 선택",
-                "", "HML 파일 (*.hml)"
+            # 매핑 UI를 띄웁니다.
+            self.mapping_window = MappingWindow(
+                cropped_images_path=self.default_cropped_image_dir,
+                p_tag_list=p_tags_list,
+                source_hml_path=source_path,
+                template_manager=self.converter.template_manager,
+                parent=self
             )
-
-            if not source_path:
-                return
-
-            # 사용자로부터 새 템플릿 이름 입력 받기
-            template_name, ok = QInputDialog.getText(
-                self, "새 템플릿 생성",
-                "템플릿 이름을 입력하세요 (확장자 제외):",
-                text="새템플릿"
-            )
-
-            if not ok or not template_name:
-                return
-
-            # 템플릿 생성
-            success, message = self.converter.template_manager.create_template_from_source(source_path, template_name)
-
-            if success:
-                QMessageBox.information(self, "성공", message)
-            else:
-                QMessageBox.critical(self, "오류", message)
+            self.mapping_window.template_creation_finished.connect(self.on_final_creation_completed)
+            self.mapping_window.show()
 
         except Exception as e:
-            QMessageBox.critical(
-                self, "오류",
-                f"템플릿 생성 중 오류가 발생했습니다: {str(e)}"
-            )
+            self.setEnabled(True)
+            QMessageBox.critical(self, "오류", f"매핑 창을 여는 중 오류가 발생했습니다:\n{e}")
+            traceback.print_exc()
+
+    def on_final_creation_completed(self, success, message):
+        print("on_final_creation_completed - success:", success)
+        """[신규] 매핑 창의 모든 작업이 끝났을 때 호출될 최종 슬롯."""
+
+        # ★★★ 해결 2: 메인 윈도우 UI를 다시 활성화합니다. ★★★
+        self.setEnabled(True)
+        delete_folder_contents_permanently(self.default_split_hml_dir)
+        delete_folder_contents_permanently(self.default_image_dir)
+        delete_folder_contents_permanently(self.default_cropped_image_dir)
+
+        # 최종 결과를 사용자에게 알립니다.
+        if success:
+            # 최종 성공 메시지를 표시합니다.
+            QMessageBox.information(self, "성공", message)
+        else:
+            # 실패 시 오류 메시지를 표시합니다.
+            QMessageBox.critical(self, "오류", message)

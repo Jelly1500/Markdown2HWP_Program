@@ -472,3 +472,88 @@ class TemplateManager:
             
         except Exception as e:
             return False, f"템플릿 생성 중 오류 발생: {str(e)}" 
+    
+    def create_template_from_source_advanced(self, source_path, template_name, p_tag_mappings):
+        """
+        원본 문서 설정과 입력된 P 태그 매핑이 적용된 새 템플릿을 생성합니다.
+        (요구사항에 맞춰 수정된 함수)
+        """
+        try:
+            # 템플릿 이름에 .hml 확장자 추가
+            if not template_name.endswith('.hml'):
+                template_name += '.hml'
+            
+            # 새 템플릿 파일 경로
+            new_template_path = os.path.join(self.default_template_dir, template_name)
+            
+            # 기본 템플릿 파일이 존재하는지 확인
+            if not os.path.exists(self.default_template_file):
+                return False, "기본 템플릿 파일을 찾을 수 없습니다."
+            
+            # --- 기존 로직 (HEAD 및 PAGEDEF 태그 처리) - 그대로 유지 ---
+            with open(source_path, 'r', encoding='utf-8') as f:
+                source_content = f.read()
+            
+            head_pattern = r'<HEAD.*?</HEAD>'
+            head_match = re.search(head_pattern, source_content, re.DOTALL)
+            if not head_match:
+                return False, "원본 파일에서 HEAD 태그를 찾을 수 없습니다."
+            head_content = head_match.group(0)
+
+            pagedef_pattern = r'<PAGEDEF.*?</PAGEDEF>'
+            pagedef_match = re.search(pagedef_pattern, source_content, re.DOTALL)
+            if not pagedef_match:
+                return False, "원본 파일에서 PAGEDEF 태그를 찾을 수 없습니다."
+            pagedef_content = pagedef_match.group(0)
+
+            with open(self.default_template_file, 'r', encoding='utf-8') as f:
+                template_content = f.read()
+            
+            template_content = re.sub(r'<HEAD.*?</HEAD>', head_content, template_content, flags=re.DOTALL)
+            template_content = re.sub(r'<PAGEDEF.*?</PAGEDEF>', pagedef_content, template_content, flags=re.DOTALL)
+
+            # --- ★★★ 신규 로직 (BODY 내용 생성 및 교체) ★★★ ---
+
+            # 1. 8개의 플레이스홀더 P 태그를 생성합니다.
+            placeholder_p_tag = '<P ParaShape="0" Style="0"><TEXT CharShape="0"><CHAR>###</CHAR></TEXT></P>'
+            p_tag_list = [placeholder_p_tag] * 8
+            
+            # 2. 입력받은 p_tag_mappings에 따라 플레이스홀더를 실제 P 태그로 교체합니다.
+            for line_num_str, new_p_tag in p_tag_mappings.items():
+                try:
+                    # 1 기반 인덱스를 0 기반으로 변환
+                    index = int(line_num_str) - 1
+                    if 0 <= index < len(p_tag_list):
+                        p_tag_list[index] = new_p_tag
+                    else:
+                        print(f"경고: 유효하지 않은 줄 번호 '{line_num_str}'는 무시됩니다.")
+                except (ValueError, TypeError):
+                    print(f"경고: 잘못된 키 값 '{line_num_str}'는 무시됩니다.")
+
+            # 3. 수정된 P 태그 리스트를 하나의 문자열로 결합합니다.
+            final_p_tags_string = "\n".join(p_tag_list)
+
+            # 4. 템플릿에서 기존 BODY 블록을 찾아 새로 생성한 내용으로 교체합니다.
+            #    이때, BODY와 SECTION의 여는 태그는 원본 템플릿의 것을 유지하여 속성을 보존합니다.
+            body_open_match = re.search(r'(<BODY.*?>)', template_content, re.DOTALL)
+            section_open_match = re.search(r'(<SECTION.*?>)', template_content, re.DOTALL)
+            
+            body_open_tag = body_open_match.group(1) if body_open_match else "<BODY>"
+            section_open_tag = section_open_match.group(1) if section_open_match else '<SECTION ID="0">'
+            
+            # 새로운 BODY 블록 구성
+            new_body_block = f"{body_open_tag}\n{section_open_tag}\n{final_p_tags_string}\n</SECTION>\n</BODY>"
+            
+            # 기존 BODY 블록 전체를 새로운 블록으로 교체
+            template_content = re.sub(r'<BODY.*?</BODY>', new_body_block, template_content, flags=re.DOTALL)
+
+            # -------------------- 신규 로직 끝 --------------------
+
+            # 수정된 템플릿을 새 파일로 저장
+            with open(new_template_path, 'w', encoding='utf-8') as f:
+                f.write(template_content)
+            
+            return True, f"새 템플릿 '{template_name}' 생성 완료"
+            
+        except Exception as e:
+            return False, f"템플릿 생성 중 오류 발생: {str(e)}"
