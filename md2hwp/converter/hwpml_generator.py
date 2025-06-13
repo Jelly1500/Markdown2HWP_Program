@@ -45,67 +45,54 @@ class HWPMLGenerator:
                 hwpml += self._create_default_hwpml(element)
                 continue
 
-            h1_structure_to_use = template_style['structure'] # 기본적으로 원본 구조 사용
+            structure_to_use = template_style['structure']
 
-            # --- 수정: H1 처리 로직 분기 ---
-            if element_type == 'h1':
-                if is_first_h1:
-                    # 첫 번째 H1: 원본 구조 사용 및 플래그 업데이트
-                    is_first_h1 = False
-                    # 구조는 h1_structure_to_use (기본값) 그대로 사용
-                else:
-                    # 두 번째 이후 H1: 페이지/섹션 정의 제거
-                    # 1. SECDEF 제거
-                    modified_structure = re.sub(r'<SECDEF.*?</SECDEF>', '', h1_structure_to_use, flags=re.DOTALL)
-                    # 2. COLDEF 제거
-                    modified_structure = re.sub(r'<COLDEF.*?/>', '', modified_structure)
-                    # 3. P 태그 속성 정리 (ParaShape, Style만 남김)
-                    match_p = re.search(r'<P\s+(.*?)\s*>', modified_structure)
-                    if match_p:
-                        attrs_str = match_p.group(1)
-                        para_shape_match = re.search(r'ParaShape="(\d+)"', attrs_str)
-                        style_match = re.search(r'Style="(\d+)"', attrs_str)
-                        if para_shape_match and style_match:
-                            new_p_tag = f'<P ParaShape="{para_shape_match.group(1)}" Style="{style_match.group(1)}">'
-                            # 기존 P 태그를 새 태그로 교체
-                            modified_structure = re.sub(r'<P\s+.*?\s*>', new_p_tag, modified_structure, count=1)
-                            h1_structure_to_use = modified_structure # 수정된 구조 사용
-                        else:
-                             # 필요한 속성을 못찾으면 안전하게 원본 사용 (혹은 기본 P 태그 생성)
-                             print(f"경고: H1 스타일의 P 태그에서 ParaShape 또는 Style 속성을 찾을 수 없습니다. 원본 구조를 사용합니다.")
-                             h1_structure_to_use = h1_structure_to_use # 원본 사용
+            if element_type.startswith('h'):
+                text = element['content']
+
+                # 해당 제목 스타일에 특수문자 자동 번호 매기기 기능이 있는지 확인
+                if template_style.get('has_special_char_numbering', False):
+                    # 자동 번호가 있다면, 마크다운 텍스트의 수동 번호 제거
+                    text = re.sub(r'^\s*(\d+(\.\d+)*\.)\s*', '', text)
+
+                # h1 태그의 특별 처리 (페이지 나누기 등)
+                if element_type == 'h1':
+                    if is_first_h1:
+                        is_first_h1 = False
                     else:
-                         print(f"경고: H1 스타일에서 P 태그를 찾을 수 없습니다. 원본 구조를 사용합니다.")
-                         h1_structure_to_use = h1_structure_to_use # 원본 사용
-
-                # 헤딩 처리 (원본 또는 수정된 구조 사용)
-                # Pass element_type as style_key
-                hwpml += self._insert_text_into_template(h1_structure_to_use, element['content'], element_type)
-            # ----------------------------------
-            elif element_type == 'h2':
-                # h2 태그에 문단 간격이 조정된 ParaShape 적용
-                margin_para_shape = self.template_manager.margin_para_shapes.get('h2')
-                if margin_para_shape:
-                    # P 태그의 ParaShape 속성만 수정
-                    modified_structure = re.sub(
-                        r'ParaShape="(\d+)"',
-                        f'ParaShape="{margin_para_shape}"',
-                        h1_structure_to_use
-                    )
-                    # Pass element_type as style_key
-                    hwpml += self._insert_text_into_template(modified_structure, element['content'], element_type)
-                else:
-                    # Pass element_type as style_key
-                    hwpml += self._insert_text_into_template(h1_structure_to_use, element['content'], element_type)
-            elif element_type in ['h3', 'h4', 'h5', 'h6']:
-                # Pass element_type as style_key
-                hwpml += self._insert_text_into_template(h1_structure_to_use, element['content'], element_type)
+                        # 두 번째 이후 H1: 페이지/섹션 정의 제거
+                        modified_structure = re.sub(r'<SECDEF.*?</SECDEF>', '', structure_to_use, flags=re.DOTALL)
+                        modified_structure = re.sub(r'<COLDEF.*?/>', '', modified_structure)
+                        match_p = re.search(r'<P\s+(.*?)\s*>', modified_structure)
+                        if match_p:
+                            attrs_str = match_p.group(1)
+                            para_shape_match = re.search(r'ParaShape="(\d+)"', attrs_str)
+                            style_match = re.search(r'Style="(\d+)"', attrs_str)
+                            if para_shape_match and style_match:
+                                new_p_tag = f'<P ParaShape="{para_shape_match.group(1)}" Style="{style_match.group(1)}">'
+                                modified_structure = re.sub(r'<P\s+.*?\s*>', new_p_tag, modified_structure, count=1)
+                                structure_to_use = modified_structure
+                            else:
+                                print(f"경고: H1 스타일의 P 태그에서 ParaShape 또는 Style 속성을 찾을 수 없습니다.")
+                        else:
+                             print(f"경고: H1 스타일에서 P 태그를 찾을 수 없습니다.")
+                
+                # h2 태그의 특별 처리 (문단 위 간격 조정)
+                elif element_type == 'h2':
+                    margin_para_shape = self.template_manager.margin_para_shapes.get('h2')
+                    if margin_para_shape:
+                        structure_to_use = re.sub(
+                            r'ParaShape="(\d+)"',
+                            f'ParaShape="{margin_para_shape}"',
+                            structure_to_use
+                        )
+                
+                hwpml += self._insert_text_into_template(structure_to_use, text, element_type)
             elif element_type == 'p':
                 if element.get('has_formatting', False):
                     hwpml += self._convert_formatted_paragraph(element, template_style)
                 else:
-                    # Pass element_type as style_key
-                    hwpml += self._insert_text_into_template(h1_structure_to_use, element['content'], element_type)
+                    hwpml += self._insert_text_into_template(structure_to_use, element['content'], element_type)
             elif element_type == 'ul':
                 hwpml += self._convert_list_to_hwpml(element, template_style)
             elif element_type == 'table':

@@ -4,6 +4,7 @@ HWPML 템플릿 관리 모듈
 import re
 from bs4 import BeautifulSoup, NavigableString
 from ..config import STYLE_MAPPING_ORDER, DEFAULT_BULLET_SYMBOL
+from .special_char import SpecialCharHandler
 import os
 
 class TemplateManager:
@@ -17,6 +18,7 @@ class TemplateManager:
         self.style_mapping_order = STYLE_MAPPING_ORDER
         self.bullet_symbol = DEFAULT_BULLET_SYMBOL  # 기본 글머리표
         self.margin_para_shapes = {}
+        self.special_char_handler = SpecialCharHandler()
         
         # 기본 템플릿 경로 설정 수정
         base_path = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -35,7 +37,7 @@ class TemplateManager:
         try:
             with open(template_path, 'r', encoding='utf-8') as file:
                 self.template_content = file.read()
-                
+            
             # 템플릿에서 서식 구조 추출
             self._extract_template_styles()
             
@@ -75,12 +77,27 @@ class TemplateManager:
         for idx, tag_structure in enumerate(balanced_p_tags):
             if idx < len(self.style_mapping_order):
                 style_key = self.style_mapping_order[idx]
+
+                # 특수 문자 자동 번호가 있는지 확인
+                has_special_char_numbering = False
+                char_pattern = re.compile(r'<CHAR>(.*?)</CHAR>')
+                matches = char_pattern.finditer(tag_structure)
+                for match in matches:
+                    content = match.group(1)
+                    for char in content:
+                        if self.special_char_handler.identify_special_char(char):
+                            has_special_char_numbering = True
+                            break
+                    if has_special_char_numbering:
+                        break
+
                 self.template_styles[style_key] = {
                     'structure': tag_structure,
                     'para_shape': self._extract_para_shape(tag_structure),
                     'char_shape': self._extract_char_shape(tag_structure),
                     'has_table': '<TABLE' in tag_structure,
-                    'has_field': '<FIELDBEGIN' in tag_structure
+                    'has_field': '<FIELDBEGIN' in tag_structure,
+                    'has_special_char_numbering': has_special_char_numbering
                 }
                 
                 # 순서 없는 리스트에서 글머리표 추출
