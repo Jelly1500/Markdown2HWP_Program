@@ -53,7 +53,7 @@ class HWPMLGenerator:
                 # 해당 제목 스타일에 특수문자 자동 번호 매기기 기능이 있는지 확인
                 if template_style.get('has_special_char_numbering', False):
                     # 자동 번호가 있다면, 마크다운 텍스트의 수동 번호 제거 (공백이 하나 이상 있어야 함)
-                    text = re.sub(r'^\s*(\d+(\.\d+)*)\.?\s+', '', text)
+                    text = re.sub(r'^\s*(\d+(\.\d+)*)\.?', '', text)
 
                 # h1 태그의 특별 처리 (페이지 나누기 등)
                 if element_type == 'h1':
