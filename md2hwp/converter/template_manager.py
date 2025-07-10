@@ -14,6 +14,7 @@ class TemplateManager:
         self.template_content = None
         self.template_styles = {}
         self.special_formats = {}
+        self.list_special_formats = {}
         self.table_border_fills = {'header': "3", 'footer': "4", 'body': "6"}  # 기본값
         self.style_mapping_order = STYLE_MAPPING_ORDER
         self.bullet_symbol = DEFAULT_BULLET_SYMBOL  # 기본 글머리표
@@ -42,7 +43,7 @@ class TemplateManager:
             self._extract_template_styles()
             
             # CharShape 추출 및 특별 서식 복제
-            self.special_formats = self._extract_and_clone_charshapes()
+            self._extract_and_clone_charshapes()
             
             # 테이블 테두리 스타일 추가
             border_result = self.add_table_borderfills()
@@ -102,6 +103,13 @@ class TemplateManager:
                 
                 # 순서 없는 리스트에서 글머리표 추출
                 if style_key == 'ul':
+                    text_matches = re.findall(r'<TEXT CharShape="(\d+)">', tag_structure)
+                    if len(text_matches) >= 2:
+                        self.template_styles[style_key]['bullet_char_shape'] = text_matches[0]
+                        self.template_styles[style_key]['text_char_shape'] = text_matches[1]
+                    else:
+                        self.template_styles[style_key]['bullet_char_shape'] = self._extract_char_shape(tag_structure)
+                        self.template_styles[style_key]['text_char_shape'] = self._extract_char_shape(tag_structure)
                     bullet = self._extract_bullet_symbol(tag_structure)
                     if bullet:
                         self.bullet_symbol = bullet
@@ -167,10 +175,9 @@ class TemplateManager:
         return match.group(1) if match else "0"
     
     def _extract_and_clone_charshapes(self):
-        """템플릿에서 CharShape을 추출하고 특별 서식이 적용된 복제본 생성"""
+        """템플릿에서 CharShape을 추출하고 특별 서식이 적용된 복제본 생성 (단락/리스트 분리)"""
         soup = BeautifulSoup(self.template_content, 'xml')
 
-        # HWPML 문서의 CHARSHAPE 찾기 - 경로 수정
         docinfo = soup.find('MAPPINGTABLE')
         if not docinfo:
             raise ValueError("템플릿에 DOCINFO 섹션이 없습니다")
@@ -179,83 +186,69 @@ class TemplateManager:
         if not charshapepool:
             raise ValueError("템플릿에 CHARSHAPEPOOL 섹션이 없습니다")
 
-        # 모든 CharShape 요소 가져오기
-        charshapes = charshapepool.find_all('CHARSHAPE')
-        if not charshapes:
+        all_charshapes = charshapepool.find_all('CHARSHAPE')
+        if not all_charshapes:
             raise ValueError("템플릿에 CHARSHAPE 정의가 없습니다")
 
-        # 일반 단락과 리스트의 CharShape ID 찾기
-        base_charshape_id = self.template_styles.get('p', {}).get('char_shape') or self.template_styles.get('ul', {}).get('char_shape')
-        base_charshape = next((cs for cs in charshapes if cs.get('Id') == base_charshape_id), None)
+        last_id = max(int(cs.get('Id', '0')) for cs in all_charshapes)
 
-        if base_charshape is None:
-            print(f"경고: ID {base_charshape_id}에 해당하는 CHARSHAPE을 찾을 수 없습니다. 첫 번째 CHARSHAPE을 사용합니다.")
-            base_charshape = charshapes[0]
+        # --- 1. 일반 단락('p') 기반 특수 서식 생성 ---
+        base_charshape_id_p = self.template_styles.get('p', {}).get('char_shape')
+        base_charshape_p = next((cs for cs in all_charshapes if cs.get('Id') == base_charshape_id_p), None)
 
-        # 새로운 CharShape ID 생성
-        last_id = max(int(cs.get('Id', '0')) for cs in charshapes)
+        if base_charshape_p is None:
+            print(f"경고: 'p' 스타일에 대한 ID {base_charshape_id_p}의 CHARSHAPE을 찾을 수 없습니다. 첫 번째 CHARSHAPE을 사용합니다.")
+            base_charshape_p = all_charshapes[0] if all_charshapes else None
+        
+        if base_charshape_p:
+            p_formats = {
+                'strong': str(last_id + 1), 'em': str(last_id + 2), 'underline': str(last_id + 3),
+                'strong_em': str(last_id + 4), 'strong_underline': str(last_id + 5), 'em_underline': str(last_id + 6),
+                'strong_em_underline': str(last_id + 7)
+            }
+            self.special_formats = p_formats
+            
+            # Clone and append for 'p'
+            strong_p = self._clone_charshape(base_charshape_p, p_formats['strong']); strong_p.append(soup.new_tag("BOLD")); charshapepool.append(strong_p)
+            em_p = self._clone_charshape(base_charshape_p, p_formats['em']); em_p.append(soup.new_tag("ITALIC")); charshapepool.append(em_p)
+            underline_p = self._clone_charshape(base_charshape_p, p_formats['underline']); underline_p.append(soup.new_tag("UNDERLINE", Color="16711680", Shape="Solid", Type="Bottom")); charshapepool.append(underline_p)
+            strong_em_p = self._clone_charshape(base_charshape_p, p_formats['strong_em']); strong_em_p.append(soup.new_tag("BOLD")); strong_em_p.append(soup.new_tag("ITALIC")); charshapepool.append(strong_em_p)
+            strong_underline_p = self._clone_charshape(base_charshape_p, p_formats['strong_underline']); strong_underline_p.append(soup.new_tag("BOLD")); strong_underline_p.append(soup.new_tag("UNDERLINE", Color="16711680", Shape="Solid", Type="Bottom")); charshapepool.append(strong_underline_p)
+            em_underline_p = self._clone_charshape(base_charshape_p, p_formats['em_underline']); em_underline_p.append(soup.new_tag("ITALIC")); em_underline_p.append(soup.new_tag("UNDERLINE", Color="16711680", Shape="Solid", Type="Bottom")); charshapepool.append(em_underline_p)
+            strong_em_underline_p = self._clone_charshape(base_charshape_p, p_formats['strong_em_underline']); strong_em_underline_p.append(soup.new_tag("BOLD")); strong_em_underline_p.append(soup.new_tag("ITALIC")); strong_em_underline_p.append(soup.new_tag("UNDERLINE", Color="16711680", Shape="Solid", Type="Bottom")); charshapepool.append(strong_em_underline_p)
+            last_id += 7
 
-        # 특별 서식 정의를 위한 새로운 CharShape 복제
-        special_formats = {
-            'strong': str(last_id + 1),      # 굵게
-            'em': str(last_id + 2),          # 기울임
-            'underline': str(last_id + 3),   # 밑줄
-            'strong_em': str(last_id + 4),   # 굵게+기울임
-            'strong_underline': str(last_id + 5),  # 굵게+밑줄
-            'em_underline': str(last_id + 6),      # 기울임+밑줄
-            'strong_em_underline': str(last_id + 7)  # 굵게+기울임+밑줄
-        }
+        # --- 2. 리스트('ul') 기반 특수 서식 생성 ---
+        base_charshape_id_ul = self.template_styles.get('ul', {}).get('text_char_shape')
+        base_charshape_ul = next((cs for cs in all_charshapes if cs.get('Id') == base_charshape_id_ul), None)
 
-        # 굵게 스타일 CharShape 복제
-        strong_charshape = self._clone_charshape(base_charshape, special_formats['strong'])
-        bold_tag = soup.new_tag("BOLD")
-        strong_charshape.append(bold_tag)
-        charshapepool.append(strong_charshape)
+        if base_charshape_ul is None:
+            print(f"경고: 'ul' 스타일에 대한 ID {base_charshape_id_ul}의 CHARSHAPE을 찾을 수 없습니다. 'p' 스타일 기반을 사용합니다.")
+            base_charshape_ul = base_charshape_p # Fallback to paragraph style
 
-        # 기울임 스타일 CharShape 복제
-        em_charshape = self._clone_charshape(base_charshape, special_formats['em'])
-        italic_tag = soup.new_tag("ITALIC")
-        em_charshape.append(italic_tag)
-        charshapepool.append(em_charshape)
+        if base_charshape_ul:
+            ul_formats = {
+                'strong': str(last_id + 1), 'em': str(last_id + 2), 'underline': str(last_id + 3),
+                'strong_em': str(last_id + 4), 'strong_underline': str(last_id + 5), 'em_underline': str(last_id + 6),
+                'strong_em_underline': str(last_id + 7)
+            }
+            self.list_special_formats = ul_formats
+            
+            # Clone and append for 'ul'
+            strong_ul = self._clone_charshape(base_charshape_ul, ul_formats['strong']); strong_ul.append(soup.new_tag("BOLD")); charshapepool.append(strong_ul)
+            em_ul = self._clone_charshape(base_charshape_ul, ul_formats['em']); em_ul.append(soup.new_tag("ITALIC")); charshapepool.append(em_ul)
+            underline_ul = self._clone_charshape(base_charshape_ul, ul_formats['underline']); underline_ul.append(soup.new_tag("UNDERLINE", Color="16711680", Shape="Solid", Type="Bottom")); charshapepool.append(underline_ul)
+            strong_em_ul = self._clone_charshape(base_charshape_ul, ul_formats['strong_em']); strong_em_ul.append(soup.new_tag("BOLD")); strong_em_ul.append(soup.new_tag("ITALIC")); charshapepool.append(strong_em_ul)
+            strong_underline_ul = self._clone_charshape(base_charshape_ul, ul_formats['strong_underline']); strong_underline_ul.append(soup.new_tag("BOLD")); strong_underline_ul.append(soup.new_tag("UNDERLINE", Color="16711680", Shape="Solid", Type="Bottom")); charshapepool.append(strong_underline_ul)
+            em_underline_ul = self._clone_charshape(base_charshape_ul, ul_formats['em_underline']); em_underline_ul.append(soup.new_tag("ITALIC")); em_underline_ul.append(soup.new_tag("UNDERLINE", Color="16711680", Shape="Solid", Type="Bottom")); charshapepool.append(em_underline_ul)
+            strong_em_underline_ul = self._clone_charshape(base_charshape_ul, ul_formats['strong_em_underline']); strong_em_underline_ul.append(soup.new_tag("BOLD")); strong_em_underline_ul.append(soup.new_tag("ITALIC")); strong_em_underline_ul.append(soup.new_tag("UNDERLINE", Color="16711680", Shape="Solid", Type="Bottom")); charshapepool.append(strong_em_underline_ul)
+            last_id += 7
 
-        # 밑줄 스타일 CharShape 복제
-        underline_charshape = self._clone_charshape(base_charshape, special_formats['underline'])
-        underline_tag = soup.new_tag("UNDERLINE", Color="16711680", Shape="Solid", Type="Bottom")
-        underline_charshape.append(underline_tag)
-        charshapepool.append(underline_charshape)
-
-        # 굵게+기울임 스타일 CharShape 복제
-        strong_em_charshape = self._clone_charshape(base_charshape, special_formats['strong_em'])
-        strong_em_charshape.append(soup.new_tag("BOLD"))
-        strong_em_charshape.append(soup.new_tag("ITALIC"))
-        charshapepool.append(strong_em_charshape)
-
-        # 굵게+밑줄 스타일 CharShape 복제
-        strong_underline_charshape = self._clone_charshape(base_charshape, special_formats['strong_underline'])
-        strong_underline_charshape.append(soup.new_tag("BOLD"))
-        strong_underline_charshape.append(soup.new_tag("UNDERLINE", Color="16711680", Shape="Solid", Type="Bottom"))
-        charshapepool.append(strong_underline_charshape)
-
-        # 기울임+밑줄 스타일 CharShape 복제
-        em_underline_charshape = self._clone_charshape(base_charshape, special_formats['em_underline'])
-        em_underline_charshape.append(soup.new_tag("ITALIC"))
-        em_underline_charshape.append(soup.new_tag("UNDERLINE", Color="16711680", Shape="Solid", Type="Bottom"))
-        charshapepool.append(em_underline_charshape)
-
-        # 굵게+기울임+밑줄 스타일 CharShape 복제
-        all_formats_charshape = self._clone_charshape(base_charshape, special_formats['strong_em_underline'])
-        all_formats_charshape.append(soup.new_tag("BOLD"))
-        all_formats_charshape.append(soup.new_tag("ITALIC"))
-        all_formats_charshape.append(soup.new_tag("UNDERLINE", Color="16711680", Shape="Solid", Type="Bottom"))
-        charshapepool.append(all_formats_charshape)
-
-        # 템플릿 내용 업데이트
         self.template_content = str(soup)
 
-        return special_formats
 
     def _clone_charshape(self, base_charshape, new_id):
-        """CharShape 요소를 복제하고 새 ID 할당"""
+        """CharShape 객체를 복제하고 새 ID를 할당합니다."""
         soup = BeautifulSoup(features='xml')
         
         # 새 CharShape 태그 생성

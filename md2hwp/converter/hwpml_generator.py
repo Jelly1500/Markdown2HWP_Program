@@ -319,12 +319,11 @@ class HWPMLGenerator:
         indent = "  " * level
         hwpml += f'<P {p_attributes}>'
 
-        # 글머리 기호에는 템플릿의 char_shape 사용 (리스트 스타일)
-        hwpml += f'<TEXT CharShape="{char_shape}"><CHAR>{indent}{prefix}</CHAR></TEXT>'
+        # 글머리 기호에는 템플릿의 bullet_char_shape 사용
+        hwpml += f'<TEXT CharShape="{self.template_manager.template_styles.get('ul', {}).get('bullet_char_shape', char_shape)}"><CHAR>{indent}{prefix}</CHAR></TEXT>'
 
-        # 텍스트 내용에는 일반 단락 스타일 사용
-        p_style = self.template_manager.template_styles.get('p', {})
-        text_char_shape = p_style.get('char_shape', "0")  # 일반 단락 스타일 또는 기본값 "0"
+        # 텍스트 내용에는 리스트의 text_char_shape 사용
+        text_char_shape = self.template_manager.template_styles.get('ul', {}).get('text_char_shape', '0')
 
         for fragment in fragments:
             fragment_type = fragment['type']
@@ -336,9 +335,9 @@ class HWPMLGenerator:
             if fragment_type == 'text':
                 hwpml += f'<TEXT CharShape="{text_char_shape}"><CHAR>{content}</CHAR></TEXT>'
             elif fragment_type == 'strong':
-                hwpml += f'<TEXT CharShape="{self.template_manager.special_formats["strong"]}"><CHAR>{content}</CHAR></TEXT>'
+                hwpml += f'<TEXT CharShape="{self.template_manager.list_special_formats["strong"]}"><CHAR>{content}</CHAR></TEXT>'
             elif fragment_type == 'em':
-                hwpml += f'<TEXT CharShape="{self.template_manager.special_formats["em"]}"><CHAR>{content}</CHAR></TEXT>'
+                hwpml += f'<TEXT CharShape="{self.template_manager.list_special_formats["em"]}"><CHAR>{content}</CHAR></TEXT>'
             elif fragment_type == 'a':
                 # 하이퍼링크 처리
                 field_id = self.id_manager.next_field_id()
@@ -347,11 +346,11 @@ class HWPMLGenerator:
                 href = fragment.get('href', '').replace('/', '\\/')
                 command = f"{href};1;0;0;"
 
-                hwpml += f'<TEXT CharShape="{self.template_manager.special_formats["underline"]}">'
+                hwpml += f'<TEXT CharShape="{self.template_manager.list_special_formats["underline"]}">'
                 hwpml += f'<FIELDBEGIN Command="{command}" Dirty="true" Editable="false" FieldId="{field_id}" InstId="{inst_id}" Property="0" Type="Hyperlink"/>'
                 hwpml += '</TEXT>'
-                hwpml += f'<TEXT CharShape="{self.template_manager.special_formats["underline"]}"><CHAR>{content}</CHAR></TEXT>'
-                hwpml += f'<TEXT CharShape="{self.template_manager.special_formats["underline"]}">'
+                hwpml += f'<TEXT CharShape="{self.template_manager.list_special_formats["underline"]}"><CHAR>{content}</CHAR></TEXT>'
+                hwpml += f'<TEXT CharShape="{self.template_manager.list_special_formats["underline"]}">'
                 hwpml += f'<FIELDEND Editable="false" FieldId="{field_id}" Property="0" Type="Hyperlink"/>'
                 hwpml += '</TEXT>'
 
