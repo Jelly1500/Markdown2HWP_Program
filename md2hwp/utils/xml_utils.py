@@ -29,7 +29,7 @@ def set_attribute(element, attribute, value):
 
 def replace_section_content(xml_content, pattern, replacement, flags=re.DOTALL):
     """정규식 패턴에 따라 XML 내용의 일부를 교체"""
-    return re.sub(pattern, replacement, xml_content, flags=flags)
+    return re.sub(pattern, lambda m: replacement, xml_content, flags=flags)
 
 def create_new_element(soup, tag_name, attributes=None):
     """새 XML 요소 생성"""
