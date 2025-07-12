@@ -98,6 +98,8 @@ class HWPMLGenerator:
             elif element_type == 'table':
                 table_hwpml = self.table_generator.create_table(element)
                 hwpml += table_hwpml
+            elif element_type == 'code':
+                hwpml += self._convert_code_block(element)
 
         # --- 수정: is_first_h1 상태 반환 ---
         return hwpml, is_first_h1
@@ -363,6 +365,45 @@ class HWPMLGenerator:
                 hwpml += self._process_list_item(nested_item, template, char_shape, top_level_counter, is_top_level=False, counter=nested_counter)
 
         return hwpml
+    
+    def _convert_code_block(self, element):
+        """코드 블록을 HWPML 단락으로 변환. 공백과 줄바꿈을 보존."""
+        # 'p' 스타일을 코드 블록의 기반으로 사용. 향후 'code' 전용 스타일을 만들 수 있음.
+        style = self.template_manager.template_styles.get('p')
+        if not style:
+            # 'p' 스타일이 없으면 기본 HWPML 생성
+            return self._create_default_hwpml(element)
+
+        para_shape = style.get('para_shape', '0')
+        # 이상적으로는 고정폭 글꼴을 위한 별도의 char_shape를 사용해야 함
+        char_shape = style.get('char_shape', '0') 
+        
+        raw_content = element['content']
+        # mistune이 추가하는 후행 줄바꿈 제거
+        if raw_content.endswith('\n'):
+            raw_content = raw_content[:-1]
+
+        # 탭을 4개의 공백으로 변환
+        text_content = raw_content.replace('\t', '    ')
+        
+        lines = text_content.split('\n')
+        processed_lines = []
+        for line in lines:
+            # 선행 공백을 비분리 공백(U+00A0)으로 변환하여 보존
+            leading_spaces_count = len(line) - len(line.lstrip(' '))
+            leading_spaces = '\u00A0' * leading_spaces_count
+            
+            # 나머지 텍스트는 XML 특수 문자(&, <, >)를 이스케이프 처리
+            stripped_line = line.lstrip(' ')
+            escaped_line = stripped_line.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+            
+            processed_lines.append(leading_spaces + escaped_line)
+        
+        # HWPML의 <LINEBREAK/>로 줄바꿈 표현
+        final_content = '<LINEBREAK/>'.join(processed_lines)
+        
+        # 최종 HWPML 단락 구성
+        return f'<P ParaShape="{para_shape}" Style="0"><TEXT CharShape="{char_shape}"><CHAR>{final_content}</CHAR></TEXT></P>'
     
     def _create_default_hwpml(self, element):
         """기본 HWPML 요소 생성"""
