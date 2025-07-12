@@ -98,6 +98,15 @@ class HWPMLGenerator:
             elif element_type == 'table':
                 table_hwpml = self.table_generator.create_table(element)
                 hwpml += table_hwpml
+            elif element_type == 'code':
+                # 코드 블록을 단락으로 변환, 줄바꿈 보존
+                code_style = self.template_manager.template_styles.get('p')
+                if code_style:
+                    structure = code_style['structure']
+                    content = element['content'].replace('&', '&amp;').replace('\n', '<LINEBREAK/>')
+                    hwpml += self._insert_text_into_template(structure, content, 'p', preserve_prefix=False)
+                else:
+                    hwpml += self._create_default_hwpml(element)
 
         # --- 수정: is_first_h1 상태 반환 ---
         return hwpml, is_first_h1

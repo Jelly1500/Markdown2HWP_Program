@@ -77,6 +77,11 @@ class MarkdownParser:
                     'type': 'table',
                     'rows': self._extract_table_rows(tag)
                 })
+            elif tag.name == 'pre':
+                elements.append({
+                    'type': 'code',
+                    'content': tag.get_text(separator='\n', strip=False)
+                })
         
         return elements
     
