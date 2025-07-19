@@ -287,6 +287,11 @@ class MainWindow(QMainWindow):
             # ★★★ FIX: Emit the signal on failure ★★★
             self.template_creation_finished.emit(False, error_message)
 
+    def closeEvent(self, event):
+        # 창이 닫힐 때(우측 상단 X 버튼 포함) 메인 윈도우가 다시 활성화되도록 시그널 emit
+        self.template_creation_finished.emit(False, "템플릿 생성이 사용자에 의해 닫기 버튼으로 취소되었습니다.")
+        super().closeEvent(event)
+
 # test.py를 직접 실행했을 때의 동작 (테스트용)
 if __name__ == '__main__':
     # # 이 파일은 이제 모듈로 사용되므로, 직접 실행 시에는 테스트 데이터를 만들어 실행합니다.
