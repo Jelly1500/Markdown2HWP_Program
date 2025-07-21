@@ -52,6 +52,14 @@ class MarkdownParser:
                     'type': tag.name,
                     'content': tag.get_text()
                 })
+            elif tag.name == 'blockquote':
+                # 인용문을 일반 문단으로 변환
+                quote_text = tag.get_text(separator='\n')
+                elements.append({
+                    'type': 'p',
+                    'content': quote_text,
+                    'has_formatting': False
+                })
             elif tag.name == 'p':
                 if tag.find(['strong', 'b', 'em', 'i', 'a']):
                     elements.append({
