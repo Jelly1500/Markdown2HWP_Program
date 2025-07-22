@@ -114,37 +114,54 @@ class HWPMLGenerator:
         normal_char_shape = template_style['char_shape']
         
         hwpml = f'<P ParaShape="{para_shape}" Style="0">'
+        current_content = ''
+        current_shape = normal_char_shape
+        
+        def flush():
+            nonlocal hwpml, current_content, current_shape
+            if current_content:
+                hwpml += f'<TEXT CharShape="{current_shape}"><CHAR>{current_content}</CHAR></TEXT>'
+                current_content = ''
         
         for fragment in paragraph['fragments']:
             fragment_type = fragment['type']
-            content = fragment['content']
+            if fragment_type == 'br':
+                flush()
+                hwpml += f'<TEXT CharShape="{current_shape}"><CHAR><LINEBREAK/></CHAR></TEXT>'
+                continue
             
-            # &를 &amp;로 변환
-            content = content.replace('&', '&amp;')
+            content = fragment['content'].replace('&', '&amp;')
             
             if fragment_type == 'text':
-                hwpml += f'<TEXT CharShape="{normal_char_shape}"><CHAR>{content}</CHAR></TEXT>'
+                new_shape = normal_char_shape
             elif fragment_type == 'strong':
-                # 굵게: 복제된 CharShape 사용
-                hwpml += f'<TEXT CharShape="{self.template_manager.special_formats["strong"]}"><CHAR>{content}</CHAR></TEXT>'
+                new_shape = self.template_manager.special_formats["strong"]
             elif fragment_type == 'em':
-                # 기울임: 복제된 CharShape 사용
-                hwpml += f'<TEXT CharShape="{self.template_manager.special_formats["em"]}"><CHAR>{content}</CHAR></TEXT>'
+                new_shape = self.template_manager.special_formats["em"]
             elif fragment_type == 'a':
+                flush()
                 field_id = self.id_manager.next_field_id()
                 inst_id = self.id_manager.next_inst_id()
-                
                 href = fragment.get('href', '').replace('/', '\\/')
                 command = f"{href};1;0;0;"
-                
-                hwpml += f'<TEXT CharShape="{self.template_manager.special_formats["underline"]}">'
+                underline_shape = self.template_manager.special_formats["underline"]
+                hwpml += f'<TEXT CharShape="{underline_shape}">'
                 hwpml += f'<FIELDBEGIN Command="{command}" Dirty="true" Editable="false" FieldId="{field_id}" InstId="{inst_id}" Property="0" Type="Hyperlink"/>'
                 hwpml += '</TEXT>'
-                hwpml += f'<TEXT CharShape="{self.template_manager.special_formats["underline"]}"><CHAR>{content}</CHAR></TEXT>'
-                hwpml += f'<TEXT CharShape="{self.template_manager.special_formats["underline"]}">'
+                hwpml += f'<TEXT CharShape="{underline_shape}"><CHAR>{content}</CHAR></TEXT>'
+                hwpml += f'<TEXT CharShape="{underline_shape}">'
                 hwpml += f'<FIELDEND Editable="false" FieldId="{field_id}" Property="0" Type="Hyperlink"/>'
                 hwpml += '</TEXT>'
+                continue
+            else:
+                new_shape = normal_char_shape
+            
+            if new_shape != current_shape:
+                flush()
+            current_shape = new_shape
+            current_content += content
         
+        flush()
         hwpml += '</P>'
         
         return hwpml

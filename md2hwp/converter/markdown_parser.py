@@ -14,6 +14,11 @@ class MarkdownParser:
     def parse(self, md_text):
         """마크다운을 HTML로 변환 후 구조화된 요소로 파싱"""
         html = self.parser.html(md_text)
+        
+        # 변환된 HTML을 파일에 저장
+        with open("converted.html", "w", encoding="utf-8") as f:
+            f.write(html)
+            
         soup = BeautifulSoup(html, 'html.parser')
         return self._extract_markdown_elements(soup)
     
@@ -61,7 +66,7 @@ class MarkdownParser:
                     'has_formatting': False
                 })
             elif tag.name == 'p':
-                if tag.find(['strong', 'b', 'em', 'i', 'a']):
+                if tag.find(['strong', 'b', 'em', 'i', 'a', 'br']):
                     elements.append({
                         'type': 'p',
                         'content': tag.get_text(),
@@ -158,6 +163,8 @@ class MarkdownParser:
                     'content': prev_space + child.get_text() + next_space, 
                     'href': child.get('href', '')
                 })
+            elif child.name == 'br':
+                fragments.append({'type': 'br'})
 
         return fragments
     
