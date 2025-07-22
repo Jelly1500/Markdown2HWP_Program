@@ -58,12 +58,11 @@ class MarkdownParser:
                     'content': tag.get_text()
                 })
             elif tag.name == 'blockquote':
-                # 인용문을 일반 문단으로 변환
-                quote_text = tag.get_text(separator='\n')
                 elements.append({
-                    'type': 'p',
-                    'content': quote_text,
-                    'has_formatting': False
+                    'type': 'blockquote',
+                    'content': tag.get_text(),
+                    'has_formatting': True,
+                    'fragments': self._extract_blockquote_fragments(tag)
                 })
             elif tag.name == 'p':
                 if tag.find(['strong', 'b', 'em', 'i', 'a', 'br']):
@@ -168,6 +167,21 @@ class MarkdownParser:
 
         return fragments
     
+    def _extract_blockquote_fragments(self, blockquote_tag):
+        """인용문 태그에서 단락들을 추출하고 각 단락에서 프래그먼트를 추출합니다."""
+        fragments = []
+        p_tags = blockquote_tag.find_all('p', recursive=False)
+        
+        # 만약 <p> 태그가 없다면, blockquote 자체를 단락으로 취급합니다.
+        if not p_tags:
+            return self._extract_paragraph_fragments(blockquote_tag)
+            
+        for i, p_tag in enumerate(p_tags):
+            fragments.extend(self._extract_paragraph_fragments(p_tag))
+            if i < len(p_tags) - 1:
+                fragments.append({'type': 'br'})  # 단락 사이에 줄바꿈 추가
+        return fragments
+    
     def _extract_list_items(self, list_tag):
         """리스트 항목 추출 (공백 보존)"""
         items = []
@@ -234,6 +248,8 @@ class MarkdownParser:
                         'content': prev_space + child.get_text() + next_space, 
                         'href': child.get('href', '')
                     })
+                elif child.name == 'br':
+                    item_fragments.append({'type': 'br'})
                 elif child.name not in ['ul', 'ol']:
                     text = child.get_text()  # 공백 보존
                     if text:
@@ -277,6 +293,8 @@ class MarkdownParser:
                     item_fragments.append({'type': 'em', 'content': child.get_text()})
                 elif child.name == 'a':
                     item_fragments.append({'type': 'a', 'content': child.get_text(), 'href': child.get('href', '')})
+                elif child.name == 'br':
+                    item_fragments.append({'type': 'br'})
                 elif child.name not in ['ul', 'ol']:
                     text = child.get_text().strip()
                     if text:
