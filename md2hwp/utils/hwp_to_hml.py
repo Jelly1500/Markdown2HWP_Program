@@ -1,23 +1,6 @@
 import os
-import win32com.client
+from pyhwpx import Hwp
 from PyQt5.QtWidgets import QApplication, QFileDialog
-
-def register_security_module(hwp):
-    """한글 프로그램의 보안 경고를 우회하기 위한 모듈 등록"""
-    try:
-        # 현재 스크립트의 위치를 기준으로 상대 경로 계산
-        current_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        dll_path = os.path.join(current_dir, "FilePathCheckerModuleExample.dll")
-        
-        if not os.path.exists(dll_path):
-            print(f"보안 모듈 파일을 찾을 수 없습니다: {dll_path}")
-            return False
-            
-        hwp.RegisterModule("FilePathCheckDLL", "SecurityModule", dll_path)
-        return True
-    except Exception as e:
-        print(f"보안 모듈 등록 실패: {str(e)}")
-        return False
 
 # 파일 탐색기로 hwp 파일 경로 선택
 def get_hwp_file_path():
@@ -42,22 +25,21 @@ def convert_hwp_to_hml(file_path):
     hml_path = os.path.splitext(hwp_path)[0] + ".hml"
 
     # 한글 객체 생성
-    hwp = win32com.client.Dispatch("HWPFrame.HwpObject")
-    register_security_module(hwp)  # 보안 모듈 등록
+    hwp = Hwp(visible=False)
     
-    # HWP 파일 열기
-    hwp.Open(hwp_path, "HWP", "")
+    # HWP 파일 열기 (open 메서드는 확장자를 신경쓰지 않아도 됩니다)
+    hwp.open(hwp_path)
 
     # HML 형식으로 저장
     # format: "HWPML2X", arg: "" (또는 필요한 옵션)
-    saved = hwp.SaveAs(hml_path, "HWPML2X", "")
+    saved = hwp.save_as(hml_path, "HWPML2X")
     
     if saved:
         print(f"성공적으로 저장되었습니다: {hml_path}")
     else:
         print("저장에 실패했습니다.")
 
-    hwp.Quit()
+    hwp.quit()
     return hml_path
 
 # HML 파일을 열고 HWP로 저장하는 함수
@@ -71,21 +53,20 @@ def convert_hml_to_hwp(file_path):
     hwp_path = os.path.splitext(hml_path)[0] + ".hwp"
 
     # 한글 객체 생성
-    hwp = win32com.client.Dispatch("HWPFrame.HwpObject")
-    register_security_module(hwp)  # 보안 모듈 등록
+    hwp = Hwp()
     
     # HML 파일 열기
-    hwp.Open(hml_path, "HWPML2X", "")
+    hwp.open(hml_path, "HWPML2X")
     
     # HWP 형식으로 저장
-    saved = hwp.SaveAs(hwp_path, "HWP", "")
+    saved = hwp.save_as(hwp_path, "HWP")
     
     if saved:
         print(f"성공적으로 저장되었습니다: {hwp_path}")
     else:
         print("저장에 실패했습니다.")
 
-    hwp.Quit()
+    hwp.quit()
 
 # 실행
 if __name__ == "__main__":

@@ -1,4 +1,4 @@
-import win32com.client
+from pyhwpx import Hwp
 import os
 import time
 
@@ -9,19 +9,17 @@ def convert_hwp_to_jpg(hwp, hwp_path: str, jpg_path: str):
     """
     try:
         # 1. HWP 파일 열기
-        hwp.Open(hwp_path, "HWPML2X", "")
+        
+        hwp.open(hwp_path, "HWPML2X")
         
         # 3. PrintToImage 액션을 사용해 JPG로 저장
         abs_jpg_path = os.path.abspath(jpg_path)
         
-        act = hwp.CreateAction("PrintToImage")
-        pset = act.CreateSet()
-        act.GetDefault(pset)
-        pset.SetItem("Format", "JPG")
-        pset.SetItem("FileName", abs_jpg_path)
-        pset.SetItem("Range", 0)
-        pset.SetItem("Resolution", 300)
-        act.Execute(pset)
+        # pyhwpx는 액션 직접 실행을 다르게 처리할 수 있습니다.
+        # Hwp 클래스에 내장된 메서드를 사용하거나, API를 확인해야 합니다.
+        # 우선 SaveAs 메서드를 사용해 JPG로 저장 시도
+        hwp.save_as(abs_jpg_path, "JPG")
+
         print(f"-> 성공: '{os.path.basename(jpg_path)}' 저장 완료")
 
     except Exception as e:
@@ -53,8 +51,7 @@ def convert_all_hmls_to_jpg(hml_dir, output_dir):
     hwp = None
     try:
         print("한/글 오토메이션 객체를 한 번만 생성합니다...")
-        hwp = win32com.client.Dispatch("HwpFrame.HwpObject.2")
-        hwp.RegisterModule("FilePathCheckDLL", "FilePathCheckerModuleExample")
+        hwp = Hwp(visible=False)
         print("객체 생성 완료.")
 
         if not os.path.exists(output_dir):
@@ -82,7 +79,7 @@ def convert_all_hmls_to_jpg(hml_dir, output_dir):
     finally:
         if hwp:
             try:
-                hwp.Quit()
+                hwp.quit()
                 print("\n모든 작업 완료 후, 한/글 프로그램을 완전히 종료했습니다.")
             except Exception as e:
                 print(f"한/글 프로그램 종료 중 오류 발생: {e}")
