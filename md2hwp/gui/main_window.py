@@ -21,6 +21,8 @@ from ..utils.create_template_images import create_template_images
 # 스타일시트 가져오기
 from .styles import IOS_LIKE_QSS
 
+from md2hwp.utils.hwp_to_hml import convert_hwp_to_hml
+
 from ..utils.create_template_images import create_template_images
 from ..utils.GetHmlTags import extract_meaningful_p_tags
 from ..utils.deleteFolder import delete_folder_contents_permanently
@@ -345,7 +347,7 @@ class MainWindow(QMainWindow):
                 file_path = url.toLocalFile()
                 if os.path.isfile(file_path):
                     _, extension = os.path.splitext(file_path)
-                    if extension.lower() in ['.md', '.hml']:
+                    if extension.lower() in ['.md', '.hml', '.hwp', '.hwpx', '.hwt']:
                         event.acceptProposedAction()
                         self.overlay_widget.show()
                         self.overlay_widget.raise_()
@@ -382,7 +384,7 @@ class MainWindow(QMainWindow):
                 self.status_handler.set_success(f"마크다운 파일 로드: {os.path.basename(file_path)}")
             except Exception as e:
                 self.status_handler.set_error(f"마크다운 파일 읽기 오류: {e}")
-        elif extension == ".hml":
+        elif extension in [".hml", ".hwp", ".hwpx", ".hwt"]:
             self.set_template(file_path) # 템플릿 설정 함수 호출
         else:
             self.status_handler.set_warning(f"지원하지 않는 파일 형식: {extension}")
@@ -400,29 +402,66 @@ class MainWindow(QMainWindow):
             self.template_label.setText("템플릿: 선택되지 않음")
             self.status_handler.set_warning("기본 템플릿 파일을 찾을 수 없습니다. '템플릿 선택' 버튼을 이용하세요.")
 
-    # --- 템플릿 설정 함수 추가 ---
     def set_template(self, file_path):
         """주어진 경로의 템플릿을 로드하고 UI를 업데이트합니다."""
-        success = self.converter.load_template(file_path)
-        if success:
-            self.template_path = file_path
-            self.template_label.setText(f"템플릿: {os.path.basename(file_path)}")
-            # 템플릿 변경 시 헤딩 변경 상태 초기화
-            self.reset_heading_change_state()
-            return True
-        else:
-            self.template_path = "" # 실패 시 경로 초기화
-            self.template_label.setText("템플릿: 선택되지 않음")
-            self.status_handler.set_error(f"템플릿 로드 오류: {os.path.basename(file_path)}")
-            # 템플릿 로드 실패 시 헤딩 변경 상태 초기화
-            self.reset_heading_change_state()
+        try:
+            # 지원하는 다른 포맷들을 HML로 변환
+            if not file_path.lower().endswith('.hml'):
+                self.status_handler.set_message("템플릿 파일을 변환 중입니다...", 5000)
+                QApplication.processEvents()
+                
+                hml_path = convert_hwp_to_hml(file_path)
+                
+                if not hml_path:
+                    self.status_handler.set_error("템플릿 파일 변환에 실패했습니다.")
+                    self.update_template_button_icon(self.icon_paths['default_template'])
+                    return False
+                file_path = hml_path
+
+            success = self.converter.load_template(file_path)
+            if success:
+                self.template_path = file_path
+                self.template_label.setText(f"템플릿: {os.path.basename(file_path)}")
+                self.reset_heading_change_state()
+                icon_path = self.get_template_icon_path(file_path)
+                self.update_template_button_icon(icon_path)
+                self.status_handler.set_success(f"템플릿 로드: {os.path.basename(file_path)}")
+                return True
+            else:
+                self.template_path = ""
+                self.template_label.setText("템플릿: 선택되지 않음")
+                self.status_handler.set_error(f"템플릿 로드 오류: {os.path.basename(file_path)}")
+                self.reset_heading_change_state()
+                self.update_template_button_icon(self.icon_paths['default_template'])
+                return False
+        
+        except Exception as e:
+            self.status_handler.set_error(f"템플릿 로드 실패: {e}")
+            self.update_template_button_icon(self.icon_paths['default_template'])
             return False
+
+    def get_template_icon_path(self, template_path):
+        """템플릿 경로에 해당하는 아이콘 이미지 경로를 반환합니다."""
+        if os.path.exists(template_path):
+            if template_path.lower().endswith('.hml'):
+                return ":/qt-project.org/styles/commonstyle/images/hml.png"
+            elif template_path.lower().endswith('.hwp'):
+                return ":/qt-project.org/styles/commonstyle/images/hwp.png"
+            elif template_path.lower().endswith('.hwpx'):
+                return ":/qt-project.org/styles/commonstyle/images/hwpx.png"
+            elif template_path.lower().endswith('.hwt'):
+                return ":/qt-project.org/styles/commonstyle/images/hwt.png"
+        return ":/qt-project.org/styles/commonstyle/images/hml.png" # 기본 아이콘
+
+    def update_template_button_icon(self, icon_path):
+        """템플릿 버튼의 아이콘을 업데이트합니다."""
+        self.template_button.setIcon(QIcon(icon_path))
 
     def select_template(self):
         """템플릿 선택 다이얼로그"""
         if self.is_converting: return
         file_path, _ = QFileDialog.getOpenFileName(
-            self, "템플릿 파일 선택", self.default_template_dir, "HWP 템플릿 파일 (*.hml)"
+            self, "템플릿 파일 선택", self.default_template_dir, "템플릿 파일 (*.hml *.hwp *.hwpx *.hwt)"
         )
         if file_path:
             if self.set_template(file_path): # 템플릿 설정 함수 사용
@@ -1035,9 +1074,20 @@ class MainWindow(QMainWindow):
 
     def create_template_from_source(self):
         """[최종 수정] Worker 스레드를 사용하여 전체 템플릿 생성 워크플로우를 시작합니다."""
-        source_path, _ = QFileDialog.getOpenFileName(self, "원본 HML 파일 선택", "", "HML 파일 (*.hml)")
+        source_path, _ = QFileDialog.getOpenFileName(self, "원본 파일 선택", "", "지원하는 모든 파일 (*.hml *.hwp *.hwpx *.hwt);;HML 파일 (*.hml);;HWP 파일 (*.hwp);;HWPX 파일 (*.hwpx);;HWT 파일 (*.hwt)")
         if not source_path:
             return
+
+        hml_path = source_path
+        if not source_path.lower().endswith('.hml'):
+            self.status_handler.set_message("원본 파일을 HML로 변환 중입니다...", 5000)
+            QApplication.processEvents()
+            
+            converted_hml_path = convert_hwp_to_hml(source_path)
+            if not converted_hml_path:
+                self.status_handler.set_error("HML 변환에 실패했습니다.")
+                return
+            hml_path = converted_hml_path
 
         # 1. 처리 중 메시지 박스를 띄우고 메인 UI를 비활성화합니다.
         self.processing_msg_box = QMessageBox()
@@ -1051,7 +1101,7 @@ class MainWindow(QMainWindow):
         # 2. QThread와 Worker 객체를 생성하고 시작합니다.
         self.thread = QThread()
         self.worker = TemplateCreationWorker(
-            source_path=source_path,
+            source_path=hml_path,
             split_hml_dir=self.default_split_hml_dir,
             image_dir=self.default_image_dir,
             cropped_image_dir=self.default_cropped_image_dir
