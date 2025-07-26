@@ -153,6 +153,7 @@ class MainWindow(QMainWindow):
         # 데이터 관리
         self.image_to_p_tag_map = {}
         self.mapping_data = {} 
+        self._template_created = False  # <- 템플릿 정상 생성 여부 플래그
 
         self.setWindowTitle("문서 이미지 템플릿 매핑")
         self.setGeometry(150, 150, 1400, 900)
@@ -202,6 +203,7 @@ class MainWindow(QMainWindow):
     def cancel_operation(self):
         """Emits a cancellation signal and closes the window."""
         self.template_creation_finished.emit(False, "템플릿 생성이 사용자에 의해 취소되었습니다.")
+        self._template_created = True  # 중복 emit 방지
         self.close()
     
     def connect_signals(self):
@@ -211,10 +213,10 @@ class MainWindow(QMainWindow):
 
     def _create_drop_table(self):
         # 테이블의 아이템 이름과 최종 JSON의 키가 될 숫자(문자열)를 분리하여 관리
-        self.table_items = ["대제목", "중제목", "소제목", "세부제목1", "세부제목2", "세부제목3", "리스트", "보고서 문단 형식"]
+        self.table_items = ["대제목", "중제목", "소제목", "세부제목1", "세부제목2", "세부제목3", "일반 텍스트", "리스트"]
         self.md_map = {
             "대제목": "1", "중제목": "2", "소제목": "3", "세부제목1": "4",
-            "세부제목2": "5", "세부제목3": "6", "리스트": "7", "보고서 문단 형식": "8"
+            "세부제목2": "5", "세부제목3": "6", "일반 텍스트": "7", "리스트": "8"
         }
         table = DropTableWidget(len(self.table_items), 2)
         table.setHorizontalHeaderLabels(["MD 문법", "보고서 문단 형식"])
@@ -278,6 +280,7 @@ class MainWindow(QMainWindow):
             # ★★★ FIX: Emit the signal with the result ★★★
             self.template_creation_finished.emit(success, message)
             if success:
+                self._template_created = True  # <- 정상 생성 시 True로 설정
                 self.close() # Close window only on success
 
         except Exception as e:
@@ -289,33 +292,11 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event):
         # 창이 닫힐 때(우측 상단 X 버튼 포함) 메인 윈도우가 다시 활성화되도록 시그널 emit
-        self.template_creation_finished.emit(False, "템플릿 생성이 사용자에 의해 닫기 버튼으로 취소되었습니다.")
+        if not self._template_created:
+            self.template_creation_finished.emit(False, "템플릿 생성이 사용자에 의해 닫기 버튼으로 취소되었습니다.")
         super().closeEvent(event)
 
 # test.py를 직접 실행했을 때의 동작 (테스트용)
 if __name__ == '__main__':
-    # # 이 파일은 이제 모듈로 사용되므로, 직접 실행 시에는 테스트 데이터를 만들어 실행합니다.
-    # # 실제 앱에서는 main_window.py에서 이 클래스를 임포트하여 사용합니다.
-    # from md2hwp.converter.template_manager import TemplateManager
-    # from md2hwp.utils.GetHmlTags import extract_meaningful_p_tags
-
-    # app = QApplication(sys.argv)
     
-    # # --- 테스트 데이터 준비 ---
-    # test_hml_path = r'C:\Users\USER\Documents\Github\Markdown2HWP_Program-main\한글-템플릿 (1).hml'
-    # test_img_folder = r"C:\Users\USER\Documents\Github\Markdown2HWP_Program-main\Cropped_Images"
-    
-    # # 실제 앱 흐름과 동일하게 데이터 추출
-    # test_p_tags = extract_meaningful_p_tags(test_hml_path)
-    # test_tm = TemplateManager()
-    
-    # # 매핑 윈도우 실행
-    # window = MainWindow(
-    #     cropped_images_path=test_img_folder,
-    #     p_tag_list=test_p_tags,
-    #     source_hml_path=test_hml_path,
-    #     template_manager=test_tm
-    # )
-    # window.show()
-    # sys.exit(app.exec())
     pass
