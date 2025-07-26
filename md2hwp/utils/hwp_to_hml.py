@@ -1,16 +1,20 @@
 import os
 from pyhwpx import Hwp
-from PyQt5.QtWidgets import QApplication, QFileDialog
+from PySide6.QtWidgets import QApplication, QFileDialog
 
 # 파일 탐색기로 hwp 파일 경로 선택
 def get_hwp_file_path():
-    app = QApplication([])
+    app = QApplication.instance()
+    if not app:
+        app = QApplication([])
     file_path, _ = QFileDialog.getOpenFileName(None, "HWP 파일 선택", "", "HWP files (*.hwp)")
     return file_path
 
 # 파일 탐색기로 hml 파일 경로 선택
 def get_hml_file_path():
-    app = QApplication([])
+    app = QApplication.instance()
+    if not app:
+        app = QApplication([])
     file_path, _ = QFileDialog.getOpenFileName(None, "HML 파일 선택", "", "HML files (*.hml)")
     return file_path
 

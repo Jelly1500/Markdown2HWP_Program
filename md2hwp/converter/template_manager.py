@@ -21,9 +21,16 @@ class TemplateManager:
         self.margin_para_shapes = {}
         self.special_char_handler = SpecialCharHandler()
         
-        # 기본 템플릿 경로 설정 수정
-        base_path = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        self.default_template_dir = os.path.join(base_path, "md2hwp", "new_template")
+        # 기본 템플릿 경로 설정 수정 (빌드된 exe 환경 고려)
+        import sys
+        if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+            # PyInstaller 등으로 빌드된 경우 (.exe)
+            base_path = os.path.dirname(sys.executable)
+        else:
+            # 일반 파이썬 환경에서 실행된 경우 (소스코드)
+            base_path = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        
+        self.default_template_dir = os.path.join(base_path, "new_template")
         self.default_template_file = os.path.join(self.default_template_dir, "템플릿문서.hml")
         
         # 디버깅을 위한 경로 출력
@@ -32,6 +39,14 @@ class TemplateManager:
         print(f"Default Template Dir: {self.default_template_dir}")
         print(f"Default Template File: {self.default_template_file}")
         print(f"Default Template File Exists: {os.path.exists(self.default_template_file)}")
+        
+        # 템플릿 디렉토리가 없으면 생성
+        if not os.path.exists(self.default_template_dir):
+            try:
+                os.makedirs(self.default_template_dir, exist_ok=True)
+                print(f"템플릿 디렉토리 생성: {self.default_template_dir}")
+            except Exception as e:
+                print(f"템플릿 디렉토리 생성 실패: {e}")
     
     def load_template(self, template_path):
         """HWPML 템플릿 파일 로드 및 서식 구조 추출"""
@@ -400,6 +415,12 @@ class TemplateManager:
             # 새 템플릿 파일 경로
             new_template_path = os.path.join(self.default_template_dir, template_name)
             
+            # 템플릿 저장 경로 로그 출력
+            print(f"템플릿 생성 시작:")
+            print(f"  - 템플릿 이름: {template_name}")
+            print(f"  - 저장 경로: {new_template_path}")
+            print(f"  - 템플릿 디렉토리 존재: {os.path.exists(self.default_template_dir)}")
+            
             # 기본 템플릿 파일이 존재하는지 확인
             if not os.path.exists(self.default_template_file):
                 error_msg = f"기본 템플릿 파일을 찾을 수 없습니다.\n경로: {self.default_template_file}"
@@ -410,6 +431,7 @@ class TemplateManager:
             import shutil
             try:
                 shutil.copy2(self.default_template_file, new_template_path)
+                print(f"템플릿 파일 복사 성공: {new_template_path}")
                 print(f"새 템플릿 생성 성공: {new_template_path}")  # 디버깅을 위한 출력
                 return True, f"새 템플릿 '{template_name}' 생성 완료"
             except Exception as copy_error:
@@ -496,9 +518,19 @@ class TemplateManager:
             # 새 템플릿 파일 경로
             new_template_path = os.path.join(self.default_template_dir, template_name)
             
+            # 템플릿 저장 경로 로그 출력
+            print(f"고급 템플릿 생성 시작:")
+            print(f"  - 템플릿 이름: {template_name}")
+            print(f"  - 저장 경로: {new_template_path}")
+            print(f"  - 템플릿 디렉토리 존재: {os.path.exists(self.default_template_dir)}")
+            print(f"  - 원본 파일: {source_path}")
+            print(f"  - P태그 매핑 개수: {len(p_tag_mappings)}")
+            
             # 기본 템플릿 파일이 존재하는지 확인
             if not os.path.exists(self.default_template_file):
-                return False, "기본 템플릿 파일을 찾을 수 없습니다."
+                error_msg = f"기본 템플릿 파일을 찾을 수 없습니다.\n경로: {self.default_template_file}"
+                print(error_msg)
+                return False, error_msg
             
             # --- 기존 로직 (HEAD 및 PAGEDEF 태그 처리) - 그대로 유지 ---
             with open(source_path, 'r', encoding='utf-8') as f:
@@ -535,6 +567,7 @@ class TemplateManager:
                     index = int(line_num_str) - 1
                     if 0 <= index < len(p_tag_list):
                         p_tag_list[index] = new_p_tag
+                        print(f"  - P태그 매핑: {line_num_str} -> 인덱스 {index}")
                     else:
                         print(f"경고: 유효하지 않은 줄 번호 '{line_num_str}'는 무시됩니다.")
                 except (ValueError, TypeError):
@@ -563,7 +596,10 @@ class TemplateManager:
             with open(new_template_path, 'w', encoding='utf-8') as f:
                 f.write(template_content)
             
+            print(f"템플릿 파일 저장 성공: {new_template_path}")
             return True, f"새 템플릿 '{template_name}' 생성 완료"
             
         except Exception as e:
-            return False, f"템플릿 생성 중 오류 발생: {str(e)}"
+            error_msg = f"템플릿 생성 중 오류 발생: {str(e)}"
+            print(error_msg)
+            return False, error_msg
