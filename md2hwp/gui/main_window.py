@@ -167,7 +167,6 @@ class MainWindow(QMainWindow):
 
         # 새 템플릿 생성 메뉴 추가
         self.new_template_menu = QMenu("새 템플릿 생성")
-        self.new_template_menu.addAction("기본 문서 설정이 적용된 템플릿 생성", self.create_default_template)
         self.new_template_menu.addAction("원본 문서 설정이 적용된 템플릿 생성", self.create_template_from_source)
 
         # 새 템플릿 생성 버튼 추가
@@ -1044,33 +1043,6 @@ class MainWindow(QMainWindow):
         self.sub_heading_widget.raise_() # 헤딩 서브 위젯 올리기
         self.sub_format_widget.raise_() # 포맷 서브 위젯을 가장 위로 올리기
 
-
-    def create_default_template(self):
-        """기본 문서 설정이 적용된 새 템플릿 생성"""
-        try:
-            # 사용자로부터 새 템플릿 이름 입력 받기
-            template_name, ok = QInputDialog.getText(
-                self, "새 템플릿 생성",
-                "템플릿 이름을 입력하세요 (확장자 제외):",
-                text="새템플릿"
-            )
-
-            if not ok or not template_name:
-                return
-
-            # 템플릿 생성
-            success, message = self.converter.template_manager.create_default_template(template_name)
-
-            if success:
-                QMessageBox.information(self, "성공", message)
-            else:
-                QMessageBox.critical(self, "오류", message)
-
-        except Exception as e:
-            QMessageBox.critical(
-                self, "오류",
-                f"템플릿 생성 중 오류가 발생했습니다: {str(e)}"
-            )
 
     def create_template_from_source(self):
         """[최종 수정] Worker 스레드를 사용하여 전체 템플릿 생성 워크플로우를 시작합니다."""

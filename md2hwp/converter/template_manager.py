@@ -28,7 +28,8 @@ class TemplateManager:
             base_path = os.path.dirname(sys.executable)
         else:
             # 일반 파이썬 환경에서 실행된 경우 (소스코드)
-            base_path = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            # 현재 실행 파일이 담겨 있는 폴더의 상위 폴더를 가리키도록 수정
+            base_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         
         self.default_template_dir = os.path.join(base_path, "new_template")
         self.default_template_file = os.path.join(self.default_template_dir, "템플릿문서.hml")
