@@ -15,7 +15,25 @@ class TemplateManager:
         self.template_styles = {}
         self.special_formats = {}
         self.list_special_formats = {}
-        self.table_border_fills = {'header': "3", 'footer': "4", 'body': "6"}  # 기본값
+        # 테이블 테두리 영역별 BorderFill ID 매핑
+        # 1번째 행: 왼쪽, 가운데, 오른쪽
+        # 2번째 행: 왼쪽, 가운데, 오른쪽  
+        # 마지막 행: 왼쪽, 가운데, 오른쪽
+        # 중간 행: 왼쪽, 가운데, 오른쪽
+        self.table_border_fills = {
+            'first_row_left': "3",      # 1번째 행 가장 왼쪽
+            'first_row_center': "4",    # 1번째 행 가운데
+            'first_row_right': "5",     # 1번째 행 가장 오른쪽
+            'second_row_left': "6",     # 2번째 행 가장 왼쪽
+            'second_row_center': "7",   # 2번째 행 가운데
+            'second_row_right': "8",    # 2번째 행 가장 오른쪽
+            'last_row_left': "9",       # 마지막 행 가장 왼쪽
+            'last_row_center': "10",    # 마지막 행 가운데
+            'last_row_right': "11",     # 마지막 행 가장 오른쪽
+            'middle_row_left': "12",    # 중간 행 가장 왼쪽
+            'middle_row_center': "13",  # 중간 행 가운데
+            'middle_row_right': "14"    # 중간 행 가장 오른쪽
+        }
         self.style_mapping_order = STYLE_MAPPING_ORDER
         self.bullet_symbol = DEFAULT_BULLET_SYMBOL  # 기본 글머리표
         self.margin_para_shapes = {}
@@ -322,41 +340,107 @@ class TemplateManager:
         next_id = max(existing_ids) + 1 if existing_ids else 1
         
 
-        # 테이블용 테두리 스타일 정의 - 유형별 순서 정정
+        # 테이블용 테두리 스타일 정의 - 12개 영역별 정의
         table_borderfills = [
-            # 헤더용 테두리 (상하좌우 모두 실선) - ID: next_id
-            """<BORDERFILL BackSlash="0" BreakCellSeparateLine="0" CenterLine="0" CounterBackSlash="0" CounterSlash="0" CrookedSlash="0" Id="{}" Shadow="false" Slash="0" ThreeD="false">
-            <LEFTBORDER Type="Solid" Width="0.12mm"/>
-            <RIGHTBORDER Type="Solid" Width="0.12mm"/>
-            <TOPBORDER Type="Solid" Width="0.12mm"/>
-            <BOTTOMBORDER Type="Solid" Width="0.12mm"/>
-            <DIAGONAL Type="Solid" Width="0.1mm"/>
-            </BORDERFILL>""",
+            # 1번째 행 가장 왼쪽 (ID: next_id)
+            """<BORDERFILL BackSlash="0" BreakCellSeparateLine="0" CenterLine="0" CounterBackSlash="0" CounterSlash="0" CrookedSlash="0" Id="{}" Shadow="false" Slash="0" ThreeD="false"><LEFTBORDER Type="None" Width="0.12mm"/>
+<RIGHTBORDER Type="Solid" Width="0.12mm"/>
+<TOPBORDER Type="Solid" Width="0.4mm"/>
+<BOTTOMBORDER Type="DoubleSlim" Width="0.5mm"/>
+<DIAGONAL Type="Solid" Width="0.1mm"/></BORDERFILL>""",
 
-            # 마지막 행용 테두리 (상단 점선, 하단 실선) - ID: next_id + 1
-            """<BORDERFILL BackSlash="0" BreakCellSeparateLine="0" CenterLine="0" CounterBackSlash="0" CounterSlash="0" CrookedSlash="0" Id="{}" Shadow="false" Slash="0" ThreeD="false">
-            <LEFTBORDER Type="Solid" Width="0.12mm"/>
-            <RIGHTBORDER Type="Solid" Width="0.12mm"/>
-            <TOPBORDER Type="Dot" Width="0.3mm"/>
-            <BOTTOMBORDER Type="Solid" Width="0.12mm"/>
-            <DIAGONAL Type="Solid" Width="0.1mm"/>
-            </BORDERFILL>""",
+            # 1번째 행 가운데 (ID: next_id + 1)
+            """<BORDERFILL BackSlash="0" BreakCellSeparateLine="0" CenterLine="0" CounterBackSlash="0" CounterSlash="0" CrookedSlash="0" Id="{}" Shadow="false" Slash="0" ThreeD="false"><LEFTBORDER Type="Solid" Width="0.12mm"/>
+<RIGHTBORDER Type="Solid" Width="0.12mm"/>
+<TOPBORDER Type="Solid" Width="0.4mm"/>
+<BOTTOMBORDER Type="DoubleSlim" Width="0.5mm"/>
+<DIAGONAL Type="Solid" Width="0.1mm"/></BORDERFILL>""",
 
-            # 중간 행용 테두리 (상단 점선, 하단 점선) - ID: next_id + 2
-            """<BORDERFILL BackSlash="0" BreakCellSeparateLine="0" CenterLine="0" CounterBackSlash="0" CounterSlash="0" CrookedSlash="0" Id="{}" Shadow="false" Slash="0" ThreeD="false">
-            <LEFTBORDER Type="Solid" Width="0.12mm"/>
-            <RIGHTBORDER Type="Solid" Width="0.12mm"/>
-            <TOPBORDER Type="Dot" Width="0.3mm"/>
-            <BOTTOMBORDER Type="Dot" Width="0.3mm"/>
-            <DIAGONAL Type="Solid" Width="0.1mm"/>
-            </BORDERFILL>"""
+            # 1번째 행 가장 오른쪽 (ID: next_id + 2)
+            """<BORDERFILL BackSlash="0" BreakCellSeparateLine="0" CenterLine="0" CounterBackSlash="0" CounterSlash="0" CrookedSlash="0" Id="{}" Shadow="false" Slash="0" ThreeD="false"><LEFTBORDER Type="Solid" Width="0.12mm"/>
+<RIGHTBORDER Type="None" Width="0.12mm"/>
+<TOPBORDER Type="Solid" Width="0.4mm"/>
+<BOTTOMBORDER Type="DoubleSlim" Width="0.5mm"/>
+<DIAGONAL Type="Solid" Width="0.1mm"/></BORDERFILL>""",
+
+            # 2번째 행 가장 왼쪽 (ID: next_id + 3)
+            """<BORDERFILL BackSlash="0" BreakCellSeparateLine="0" CenterLine="0" CounterBackSlash="0" CounterSlash="0" CrookedSlash="0" Id="{}" Shadow="false" Slash="0" ThreeD="false"><LEFTBORDER Type="None" Width="0.12mm"/>
+<RIGHTBORDER Type="Solid" Width="0.12mm"/>
+<TOPBORDER Type="DoubleSlim" Width="0.5mm"/>
+<BOTTOMBORDER Type="Solid" Width="0.12mm"/>
+<DIAGONAL Type="Solid" Width="0.1mm"/></BORDERFILL>
+""",
+
+            # 2번째 행 가운데 (ID: next_id + 4)
+            """<BORDERFILL BackSlash="0" BreakCellSeparateLine="0" CenterLine="0" CounterBackSlash="0" CounterSlash="0" CrookedSlash="0" Id="{}" Shadow="false" Slash="0" ThreeD="false"><LEFTBORDER Type="Solid" Width="0.12mm"/>
+<RIGHTBORDER Type="Solid" Width="0.12mm"/>
+<TOPBORDER Type="DoubleSlim" Width="0.5mm"/>
+<BOTTOMBORDER Type="Solid" Width="0.12mm"/>
+<DIAGONAL Type="Solid" Width="0.1mm"/></BORDERFILL>""",
+
+            # 2번째 행 가장 오른쪽 (ID: next_id + 5)
+            """<BORDERFILL BackSlash="0" BreakCellSeparateLine="0" CenterLine="0" CounterBackSlash="0" CounterSlash="0" CrookedSlash="0" Id="{}" Shadow="false" Slash="0" ThreeD="false"><LEFTBORDER Type="Solid" Width="0.12mm"/>
+<RIGHTBORDER Type="None" Width="0.12mm"/>
+<TOPBORDER Type="DoubleSlim" Width="0.5mm"/>
+<BOTTOMBORDER Type="Solid" Width="0.12mm"/>
+<DIAGONAL Type="Solid" Width="0.1mm"/></BORDERFILL>""",
+
+            # 마지막 행 가장 왼쪽 (ID: next_id + 6)
+            """<BORDERFILL BackSlash="0" BreakCellSeparateLine="0" CenterLine="0" CounterBackSlash="0" CounterSlash="0" CrookedSlash="0" Id="{}" Shadow="false" Slash="0" ThreeD="false"><LEFTBORDER Type="None" Width="0.12mm"/>
+<RIGHTBORDER Type="Solid" Width="0.12mm"/>
+<TOPBORDER Type="Solid" Width="0.12mm"/>
+<BOTTOMBORDER Type="Solid" Width="0.4mm"/>
+<DIAGONAL Type="Solid" Width="0.1mm"/></BORDERFILL>""",
+
+            # 마지막 행 가운데 (ID: next_id + 7)
+            """<BORDERFILL BackSlash="0" BreakCellSeparateLine="0" CenterLine="0" CounterBackSlash="0" CounterSlash="0" CrookedSlash="0" Id="{}" Shadow="false" Slash="0" ThreeD="false"><LEFTBORDER Type="Solid" Width="0.12mm"/>
+<RIGHTBORDER Type="Solid" Width="0.12mm"/>
+<TOPBORDER Type="Solid" Width="0.12mm"/>
+<BOTTOMBORDER Type="Solid" Width="0.4mm"/>
+<DIAGONAL Type="Solid" Width="0.1mm"/></BORDERFILL>""",
+
+            # 마지막 행 가장 오른쪽 (ID: next_id + 8)
+            """<BORDERFILL BackSlash="0" BreakCellSeparateLine="0" CenterLine="0" CounterBackSlash="0" CounterSlash="0" CrookedSlash="0" Id="{}" Shadow="false" Slash="0" ThreeD="false"><LEFTBORDER Type="Solid" Width="0.12mm"/>
+<RIGHTBORDER Type="None" Width="0.12mm"/>
+<TOPBORDER Type="Solid" Width="0.12mm"/>
+<BOTTOMBORDER Type="Solid" Width="0.4mm"/>
+<DIAGONAL Type="Solid" Width="0.1mm"/></BORDERFILL>""",
+
+            # 중간 행 가장 왼쪽 (ID: next_id + 9)
+            """<BORDERFILL BackSlash="0" BreakCellSeparateLine="0" CenterLine="0" CounterBackSlash="0" CounterSlash="0" CrookedSlash="0" Id="{}" Shadow="false" Slash="0" ThreeD="false"><LEFTBORDER Type="None" Width="0.12mm"/>
+<RIGHTBORDER Type="Solid" Width="0.12mm"/>
+<TOPBORDER Type="Solid" Width="0.12mm"/>
+<BOTTOMBORDER Type="Solid" Width="0.12mm"/>
+<DIAGONAL Type="Solid" Width="0.1mm"/></BORDERFILL>""",
+
+            # 중간 행 가운데 (ID: next_id + 10)
+            """<BORDERFILL BackSlash="0" BreakCellSeparateLine="0" CenterLine="0" CounterBackSlash="0" CounterSlash="0" CrookedSlash="0" Id="{}" Shadow="false" Slash="0" ThreeD="false"><LEFTBORDER Type="Solid" Width="0.12mm"/>
+<RIGHTBORDER Type="Solid" Width="0.12mm"/>
+<TOPBORDER Type="Solid" Width="0.12mm"/>
+<BOTTOMBORDER Type="Solid" Width="0.12mm"/><DIAGONAL Type="Solid" Width="0.1mm"/></BORDERFILL>""",
+
+            # 중간 행 가장 오른쪽 (ID: next_id + 11)
+            """<BORDERFILL BackSlash="0" BreakCellSeparateLine="0" CenterLine="0" CounterBackSlash="0" CounterSlash="0" CrookedSlash="0" Id="{}" Shadow="false" Slash="0" ThreeD="false"><LEFTBORDER Type="Solid" Width="0.12mm"/>
+<RIGHTBORDER Type="None" Width="0.12mm"/>
+<TOPBORDER Type="Solid" Width="0.12mm"/>
+<BOTTOMBORDER Type="Solid" Width="0.12mm"/>
+<DIAGONAL Type="Solid" Width="0.1mm"/></BORDERFILL>"""
         ]
 
-        # 테이블 테두리 ID 저장 - 명확한 의미 부여
+        # 테이블 테두리 ID 저장 - 세분화된 영역별 매핑
         self.table_border_fills = {
-            'header': str(next_id),      # 헤더용 (상하좌우 모두 실선)
-            'footer': str(next_id + 1),  # 마지막 행용 (상단 점선, 하단 실선)
-            'body': str(next_id + 2)     # 중간 행용 (상단 실선, 하단 점선)
+            'first_row_left': str(next_id),      # 1번째 행 가장 왼쪽
+            'first_row_center': str(next_id + 1), # 1번째 행 가운데
+            'first_row_right': str(next_id + 2),  # 1번째 행 가장 오른쪽
+            'second_row_left': str(next_id + 3),  # 2번째 행 가장 왼쪽
+            'second_row_center': str(next_id + 4), # 2번째 행 가운데
+            'second_row_right': str(next_id + 5),  # 2번째 행 가장 오른쪽
+            'last_row_left': str(next_id + 6),     # 마지막 행 가장 왼쪽
+            'last_row_center': str(next_id + 7),   # 마지막 행 가운데
+            'last_row_right': str(next_id + 8),    # 마지막 행 가장 오른쪽
+            'middle_row_left': str(next_id + 9),   # 중간 행 가장 왼쪽
+            'middle_row_center': str(next_id + 10), # 중간 행 가운데
+            'middle_row_right': str(next_id + 11)   # 중간 행 가장 오른쪽
         }
 
         # BORDERFILL 요소 추가
@@ -444,67 +528,6 @@ class TemplateManager:
             error_msg = f"템플릿 생성 중 오류 발생: {str(e)}"
             print(error_msg)  # 디버깅을 위한 출력
             return False, error_msg
-
-    def create_template_from_source(self, source_path, template_name):
-        """원본 문서 설정이 적용된 새 템플릿 생성"""
-        try:
-            # 템플릿 이름에 .hml 확장자 추가
-            if not template_name.endswith('.hml'):
-                template_name += '.hml'
-            
-            # 새 템플릿 파일 경로
-            new_template_path = os.path.join(self.default_template_dir, template_name)
-            
-            # 기본 템플릿 파일이 존재하는지 확인
-            if not os.path.exists(self.default_template_file):
-                return False, "기본 템플릿 파일을 찾을 수 없습니다."
-            
-            # 원본 파일에서 HEAD 태그 전체 추출
-            with open(source_path, 'r', encoding='utf-8') as f:
-                source_content = f.read()
-            
-            # HEAD 태그 전체 추출
-            head_pattern = r'<HEAD.*?</HEAD>'
-            head_match = re.search(head_pattern, source_content, re.DOTALL)
-            
-            if not head_match:
-                return False, "원본 파일에서 HEAD 태그를 찾을 수 없습니다."
-            
-            # HEAD 태그 전체 내용 추출
-            head_content = head_match.group(0)
-            print(f"추출된 HEAD 태그: {head_content[:200]}...")
-            
-            # 원본 파일에서 PAGEDEF 태그 추출
-            pagedef_pattern = r'<PAGEDEF.*?</PAGEDEF>'
-            pagedef_match = re.search(pagedef_pattern, source_content, re.DOTALL)
-            
-            if not pagedef_match:
-                return False, "원본 파일에서 PAGEDEF 태그를 찾을 수 없습니다."
-            
-            # PAGEDEF 태그 내용 추출
-            pagedef_content = pagedef_match.group(0)
-            print(f"추출된 PAGEDEF 태그: {pagedef_content}")
-            
-            # 기본 템플릿 파일 로드
-            with open(self.default_template_file, 'r', encoding='utf-8') as f:
-                template_content = f.read()
-            
-            # 기본 템플릿의 HEAD 태그를 원본의 HEAD 태그로 교체
-            template_head_pattern = r'<HEAD.*?</HEAD>'
-            template_content = re.sub(template_head_pattern, head_content, template_content, flags=re.DOTALL)
-            
-            # 기본 템플릿의 PAGEDEF 태그를 원본의 PAGEDEF 태그로 교체
-            template_pagedef_pattern = r'<PAGEDEF.*?</PAGEDEF>'
-            template_content = re.sub(template_pagedef_pattern, pagedef_content, template_content, flags=re.DOTALL)
-            
-            # 수정된 템플릿을 새 파일로 저장
-            with open(new_template_path, 'w', encoding='utf-8') as f:
-                f.write(template_content)
-            
-            return True, f"새 템플릿 '{template_name}' 생성 완료"
-            
-        except Exception as e:
-            return False, f"템플릿 생성 중 오류 발생: {str(e)}" 
     
     def create_template_from_source_advanced(self, source_path, template_name, p_tag_mappings):
         """
@@ -542,6 +565,9 @@ class TemplateManager:
             if not head_match:
                 return False, "원본 파일에서 HEAD 태그를 찾을 수 없습니다."
             head_content = head_match.group(0)
+
+            # --- BorderFill 태그들을 head_content에 추가하는 로직 ---
+            head_content = self._add_borderfills_to_head(head_content)
 
             pagedef_pattern = r'<PAGEDEF.*?</PAGEDEF>'
             pagedef_match = re.search(pagedef_pattern, source_content, re.DOTALL)
@@ -604,3 +630,94 @@ class TemplateManager:
             error_msg = f"템플릿 생성 중 오류 발생: {str(e)}"
             print(error_msg)
             return False, error_msg
+
+    def _add_borderfills_to_head(self, head_content):
+        """head_content에 새로운 BorderFill 태그들을 추가합니다."""
+        try:
+            # BORDERFILLLIST를 찾기 위한 패턴
+            borderfilllist_pattern = r'(<BORDERFILLLIST[^>]*>)(.*?)(</BORDERFILLLIST>)'
+            borderfilllist_match = re.search(borderfilllist_pattern, head_content, re.DOTALL)
+            
+            if not borderfilllist_match:
+                print("경고: BORDERFILLLIST를 찾을 수 없습니다.")
+                return head_content
+            
+            # 기존 BORDERFILLLIST 내용 추출
+            borderfilllist_open_tag = borderfilllist_match.group(1)
+            borderfilllist_content = borderfilllist_match.group(2)
+            borderfilllist_close_tag = borderfilllist_match.group(3)
+            
+            # 기존 BorderFill 태그들의 ID 중 최대값 찾기
+            existing_borderfill_pattern = r'<BORDERFILL[^>]*Id="(\d+)"[^>]*>'
+            existing_ids = re.findall(existing_borderfill_pattern, borderfilllist_content)
+            
+            if existing_ids:
+                max_id = max(int(id_str) for id_str in existing_ids)
+                next_id = max_id + 1
+            else:
+                next_id = 1
+            
+            # 추가할 BorderFill 태그들 정의
+            new_borderfills = [
+                f'<BORDERFILL BackSlash="0" BreakCellSeparateLine="0" CenterLine="0" CounterBackSlash="0" CounterSlash="0" CrookedSlash="0" Id="{next_id}" Shadow="false" Slash="0" ThreeD="false"><LEFTBORDER Type="None" Width="0.12mm"/><RIGHTBORDER Type="Solid" Width="0.12mm"/><TOPBORDER Type="Solid" Width="0.4mm"/><BOTTOMBORDER Type="DoubleSlim" Width="0.5mm"/><DIAGONAL Type="Solid" Width="0.1mm"/></BORDERFILL>',
+                f'<BORDERFILL BackSlash="0" BreakCellSeparateLine="0" CenterLine="0" CounterBackSlash="0" CounterSlash="0" CrookedSlash="0" Id="{next_id + 1}" Shadow="false" Slash="0" ThreeD="false"><LEFTBORDER Type="Solid" Width="0.12mm"/><RIGHTBORDER Type="Solid" Width="0.12mm"/><TOPBORDER Type="Solid" Width="0.4mm"/><BOTTOMBORDER Type="DoubleSlim" Width="0.5mm"/><DIAGONAL Type="Solid" Width="0.1mm"/></BORDERFILL>',
+                f'<BORDERFILL BackSlash="0" BreakCellSeparateLine="0" CenterLine="0" CounterBackSlash="0" CounterSlash="0" CrookedSlash="0" Id="{next_id + 2}" Shadow="false" Slash="0" ThreeD="false"><LEFTBORDER Type="Solid" Width="0.12mm"/><RIGHTBORDER Type="Solid" Width="0.12mm"/><TOPBORDER Type="Solid" Width="0.4mm"/><BOTTOMBORDER Type="DoubleSlim" Width="0.5mm"/><DIAGONAL Type="Solid" Width="0.1mm"/></BORDERFILL>',
+                f'<BORDERFILL BackSlash="0" BreakCellSeparateLine="0" CenterLine="0" CounterBackSlash="0" CounterSlash="0" CrookedSlash="0" Id="{next_id + 3}" Shadow="false" Slash="0" ThreeD="false"><LEFTBORDER Type="None" Width="0.12mm"/><RIGHTBORDER Type="Solid" Width="0.12mm"/><TOPBORDER Type="Solid" Width="0.4mm"/><BOTTOMBORDER Type="DoubleSlim" Width="0.5mm"/><DIAGONAL Type="Solid" Width="0.1mm"/></BORDERFILL>',
+                f'<BORDERFILL BackSlash="0" BreakCellSeparateLine="0" CenterLine="0" CounterBackSlash="0" CounterSlash="0" CrookedSlash="0" Id="{next_id + 4}" Shadow="false" Slash="0" ThreeD="false"><LEFTBORDER Type="None" Width="0.12mm"/><RIGHTBORDER Type="Solid" Width="0.12mm"/><TOPBORDER Type="DoubleSlim" Width="0.5mm"/><BOTTOMBORDER Type="Solid" Width="0.12mm"/><DIAGONAL Type="Solid" Width="0.1mm"/></BORDERFILL>',
+                f'<BORDERFILL BackSlash="0" BreakCellSeparateLine="0" CenterLine="0" CounterBackSlash="0" CounterSlash="0" CrookedSlash="0" Id="{next_id + 5}" Shadow="false" Slash="0" ThreeD="false"><LEFTBORDER Type="None" Width="0.12mm"/><RIGHTBORDER Type="Solid" Width="0.12mm"/><TOPBORDER Type="Solid" Width="0.12mm"/><BOTTOMBORDER Type="Solid" Width="0.12mm"/><DIAGONAL Type="Solid" Width="0.1mm"/></BORDERFILL>',
+                f'<BORDERFILL BackSlash="0" BreakCellSeparateLine="0" CenterLine="0" CounterBackSlash="0" CounterSlash="0" CrookedSlash="0" Id="{next_id + 6}" Shadow="false" Slash="0" ThreeD="false"><LEFTBORDER Type="Solid" Width="0.12mm"/><RIGHTBORDER Type="None" Width="0.12mm"/><TOPBORDER Type="Solid" Width="0.4mm"/><BOTTOMBORDER Type="DoubleSlim" Width="0.5mm"/><DIAGONAL Type="Solid" Width="0.1mm"/></BORDERFILL>',
+                f'<BORDERFILL BackSlash="0" BreakCellSeparateLine="0" CenterLine="0" CounterBackSlash="0" CounterSlash="0" CrookedSlash="0" Id="{next_id + 7}" Shadow="false" Slash="0" ThreeD="false"><LEFTBORDER Type="Solid" Width="0.12mm"/><RIGHTBORDER Type="None" Width="0.12mm"/><TOPBORDER Type="DoubleSlim" Width="0.5mm"/><BOTTOMBORDER Type="Solid" Width="0.12mm"/><DIAGONAL Type="Solid" Width="0.1mm"/></BORDERFILL>',
+                f'<BORDERFILL BackSlash="0" BreakCellSeparateLine="0" CenterLine="0" CounterBackSlash="0" CounterSlash="0" CrookedSlash="0" Id="{next_id + 8}" Shadow="false" Slash="0" ThreeD="false"><LEFTBORDER Type="Solid" Width="0.12mm"/><RIGHTBORDER Type="None" Width="0.12mm"/><TOPBORDER Type="Solid" Width="0.12mm"/><BOTTOMBORDER Type="Solid" Width="0.12mm"/><DIAGONAL Type="Solid" Width="0.1mm"/></BORDERFILL>',
+                f'<BORDERFILL BackSlash="0" BreakCellSeparateLine="0" CenterLine="0" CounterBackSlash="0" CounterSlash="0" CrookedSlash="0" Id="{next_id + 9}" Shadow="false" Slash="0" ThreeD="false"><LEFTBORDER Type="None" Width="0.12mm"/><RIGHTBORDER Type="Solid" Width="0.12mm"/><TOPBORDER Type="Solid" Width="0.12mm"/><BOTTOMBORDER Type="Solid" Width="0.4mm"/><DIAGONAL Type="Solid" Width="0.1mm"/></BORDERFILL>',
+                f'<BORDERFILL BackSlash="0" BreakCellSeparateLine="0" CenterLine="0" CounterBackSlash="0" CounterSlash="0" CrookedSlash="0" Id="{next_id + 10}" Shadow="false" Slash="0" ThreeD="false"><LEFTBORDER Type="Solid" Width="0.12mm"/><RIGHTBORDER Type="Solid" Width="0.12mm"/><TOPBORDER Type="Solid" Width="0.12mm"/><BOTTOMBORDER Type="Solid" Width="0.4mm"/><DIAGONAL Type="Solid" Width="0.1mm"/></BORDERFILL>',
+                f'<BORDERFILL BackSlash="0" BreakCellSeparateLine="0" CenterLine="0" CounterBackSlash="0" CounterSlash="0" CrookedSlash="0" Id="{next_id + 11}" Shadow="false" Slash="0" ThreeD="false"><LEFTBORDER Type="Solid" Width="0.12mm"/><RIGHTBORDER Type="None" Width="0.12mm"/><TOPBORDER Type="Solid" Width="0.12mm"/><BOTTOMBORDER Type="Solid" Width="0.4mm"/><DIAGONAL Type="Solid" Width="0.1mm"/></BORDERFILL>'
+            ]
+            
+            # 새로운 BorderFill 태그들을 기존 내용 뒤에 추가
+            updated_borderfilllist_content = borderfilllist_content + '\n' + '\n'.join(new_borderfills)
+            
+            # Count 속성 업데이트를 위한 패턴
+            count_pattern = r'(Count=")(\d+)(")'
+            count_match = re.search(count_pattern, borderfilllist_open_tag)
+            
+            if count_match:
+                # 기존 Count 값 추출 및 업데이트
+                current_count = int(count_match.group(2))
+                new_count = current_count + len(new_borderfills)
+                updated_open_tag = re.sub(count_pattern, f'\\1{new_count}\\3', borderfilllist_open_tag)
+            else:
+                # Count 속성이 없는 경우 새로 추가
+                updated_open_tag = borderfilllist_open_tag.replace('>', f' Count="{len(new_borderfills)}">')
+            
+            # 업데이트된 BORDERFILLLIST 구성
+            updated_borderfilllist = f"{updated_open_tag}\n{updated_borderfilllist_content}\n{borderfilllist_close_tag}"
+            
+            # head_content에서 기존 BORDERFILLLIST를 새로운 것으로 교체
+            updated_head_content = re.sub(borderfilllist_pattern, updated_borderfilllist, head_content, flags=re.DOTALL)
+            
+            print(f"BorderFill 태그 {len(new_borderfills)}개 추가 완료 (ID: {next_id} ~ {next_id + len(new_borderfills) - 1})")
+            
+            # 추가된 BorderFill ID들을 table_border_fills에 매핑
+            # 기존 ID 값들을 새로운 ID 값으로 업데이트
+            self.table_border_fills = {
+                'first_row_left': str(next_id),      # 1번째 행 가장 왼쪽 (ID: 3 -> next_id)
+                'first_row_center': str(next_id + 1), # 1번째 행 가운데 (ID: 4 -> next_id + 1)
+                'first_row_right': str(next_id + 2),  # 1번째 행 가장 오른쪽 (ID: 5 -> next_id + 2)
+                'second_row_left': str(next_id + 3),  # 2번째 행 가장 왼쪽 (ID: 6 -> next_id + 3)
+                'second_row_center': str(next_id + 4), # 2번째 행 가운데 (ID: 7 -> next_id + 4)
+                'second_row_right': str(next_id + 5),  # 2번째 행 가장 오른쪽 (ID: 8 -> next_id + 5)
+                'last_row_left': str(next_id + 6),     # 마지막 행 가장 왼쪽 (ID: 9 -> next_id + 6)
+                'last_row_center': str(next_id + 7),   # 마지막 행 가운데 (ID: 10 -> next_id + 7)
+                'last_row_right': str(next_id + 8),    # 마지막 행 가장 오른쪽 (ID: 11 -> next_id + 8)
+                'middle_row_left': str(next_id + 9),   # 중간 행 가장 왼쪽 (ID: 12 -> next_id + 9)
+                'middle_row_center': str(next_id + 10), # 중간 행 가운데 (ID: 13 -> next_id + 10)
+                'middle_row_right': str(next_id + 11)   # 중간 행 가장 오른쪽 (ID: 14 -> next_id + 11)
+            }
+            
+            print(f"테이블 테두리 BorderFill ID 매핑 업데이트 완료")
+            
+            return updated_head_content
+            
+        except Exception as e:
+            print(f"BorderFill 추가 중 오류 발생: {e}")
+            return head_content
