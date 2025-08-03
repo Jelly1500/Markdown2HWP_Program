@@ -3,25 +3,35 @@
 """
 import re
 import mistune
+import emoji  # 👈 [수정] emoji 라이브러리 import
 from bs4 import BeautifulSoup, NavigableString
 
 class MarkdownParser:
     """마크다운 텍스트를 구조화된 요소로 파싱하는 클래스"""
-    
+
     def __init__(self):
-        self.parser = mistune
-    
+        self.parser = mistune.create_markdown()
+
+    # 👈 [수정] emoji 라이브러리를 사용하도록 메서드 변경
+    def _remove_emojis(self, text):
+        """emoji 라이브러리를 사용하여 주어진 텍스트에서 이모티콘을 제거합니다."""
+        return emoji.replace_emoji(text, replace='')
+
     def parse(self, md_text):
         """마크다운을 HTML로 변환 후 구조화된 요소로 파싱"""
-        html = self.parser.html(md_text)
+        # 1. 파싱 전 이모티콘 제거
+        md_text_no_emojis = self._remove_emojis(md_text)
         
-        # 변환된 HTML을 파일에 저장
+        # 2. HTML로 변환
+        html = self.parser(md_text_no_emojis)
+
+        # 3. 디버깅을 위한 HTML 파일 저장
         with open("converted.html", "w", encoding="utf-8") as f:
             f.write(html)
-            
+
+        # 4. HTML 파싱 및 요소 추출
         soup = BeautifulSoup(html, 'html.parser')
         return self._extract_markdown_elements(soup)
-    
     def extract_metadata(self, md_text):
         """마크다운에서 메타데이터 추출 (제목, 작성자, 날짜)"""
         metadata = {
