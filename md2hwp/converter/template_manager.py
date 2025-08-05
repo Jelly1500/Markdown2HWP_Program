@@ -632,33 +632,19 @@ class TemplateManager:
             return False, error_msg
 
     def _add_borderfills_to_head(self, head_content):
-        """head_content에 새로운 BorderFill 태그들을 추가합니다."""
+        """head_content에 새로운 BorderFill 태그들을 추가합니다. (BeautifulSoup 사용)"""
         try:
-            # BORDERFILLLIST를 찾기 위한 패턴
-            borderfilllist_pattern = r'(<BORDERFILLLIST[^>]*>)(.*?)(</BORDERFILLLIST>)'
-            borderfilllist_match = re.search(borderfilllist_pattern, head_content, re.DOTALL)
-            
-            if not borderfilllist_match:
+            soup = BeautifulSoup(head_content, 'xml')
+            borderfill_list = soup.find('BORDERFILLLIST')
+
+            if not borderfill_list:
                 print("경고: BORDERFILLLIST를 찾을 수 없습니다.")
                 return head_content
-            
-            # 기존 BORDERFILLLIST 내용 추출
-            borderfilllist_open_tag = borderfilllist_match.group(1)
-            borderfilllist_content = borderfilllist_match.group(2)
-            borderfilllist_close_tag = borderfilllist_match.group(3)
-            
-            # 기존 BorderFill 태그들의 ID 중 최대값 찾기
-            existing_borderfill_pattern = r'<BORDERFILL[^>]*Id="(\d+)"[^>]*>'
-            existing_ids = re.findall(existing_borderfill_pattern, borderfilllist_content)
-            
-            if existing_ids:
-                max_id = max(int(id_str) for id_str in existing_ids)
-                next_id = max_id + 1
-            else:
-                next_id = 1
-            
-            # 추가할 BorderFill 태그들 정의
-            new_borderfills = [
+
+            existing_ids = [int(bf.get('Id', '0')) for bf in borderfill_list.find_all('BORDERFILL')]
+            next_id = max(existing_ids) + 1 if existing_ids else 1
+
+            new_borderfills_xml = [
                 f'<BORDERFILL BackSlash="0" BreakCellSeparateLine="0" CenterLine="0" CounterBackSlash="0" CounterSlash="0" CrookedSlash="0" Id="{next_id}" Shadow="false" Slash="0" ThreeD="false"><LEFTBORDER Type="None" Width="0.12mm"/><RIGHTBORDER Type="Solid" Width="0.12mm"/><TOPBORDER Type="Solid" Width="0.4mm"/><BOTTOMBORDER Type="DoubleSlim" Width="0.5mm"/><DIAGONAL Type="Solid" Width="0.1mm"/></BORDERFILL>',
                 f'<BORDERFILL BackSlash="0" BreakCellSeparateLine="0" CenterLine="0" CounterBackSlash="0" CounterSlash="0" CrookedSlash="0" Id="{next_id + 1}" Shadow="false" Slash="0" ThreeD="false"><LEFTBORDER Type="Solid" Width="0.12mm"/><RIGHTBORDER Type="Solid" Width="0.12mm"/><TOPBORDER Type="Solid" Width="0.4mm"/><BOTTOMBORDER Type="DoubleSlim" Width="0.5mm"/><DIAGONAL Type="Solid" Width="0.1mm"/></BORDERFILL>',
                 f'<BORDERFILL BackSlash="0" BreakCellSeparateLine="0" CenterLine="0" CounterBackSlash="0" CounterSlash="0" CrookedSlash="0" Id="{next_id + 2}" Shadow="false" Slash="0" ThreeD="false"><LEFTBORDER Type="Solid" Width="0.12mm"/><RIGHTBORDER Type="Solid" Width="0.12mm"/><TOPBORDER Type="Solid" Width="0.4mm"/><BOTTOMBORDER Type="DoubleSlim" Width="0.5mm"/><DIAGONAL Type="Solid" Width="0.1mm"/></BORDERFILL>',
@@ -673,51 +659,36 @@ class TemplateManager:
                 f'<BORDERFILL BackSlash="0" BreakCellSeparateLine="0" CenterLine="0" CounterBackSlash="0" CounterSlash="0" CrookedSlash="0" Id="{next_id + 11}" Shadow="false" Slash="0" ThreeD="false"><LEFTBORDER Type="Solid" Width="0.12mm"/><RIGHTBORDER Type="None" Width="0.12mm"/><TOPBORDER Type="Solid" Width="0.12mm"/><BOTTOMBORDER Type="Solid" Width="0.4mm"/><DIAGONAL Type="Solid" Width="0.1mm"/></BORDERFILL>'
             ]
             
-            # 새로운 BorderFill 태그들을 기존 내용 뒤에 추가
-            updated_borderfilllist_content = borderfilllist_content + '\n' + '\n'.join(new_borderfills)
-            
-            # Count 속성 업데이트를 위한 패턴
-            count_pattern = r'(Count=")(\d+)(")'
-            count_match = re.search(count_pattern, borderfilllist_open_tag)
-            
-            if count_match:
-                # 기존 Count 값 추출 및 업데이트
-                current_count = int(count_match.group(2))
-                new_count = current_count + len(new_borderfills)
-                updated_open_tag = re.sub(count_pattern, f'\\1{new_count}\\3', borderfilllist_open_tag)
-            else:
-                # Count 속성이 없는 경우 새로 추가
-                updated_open_tag = borderfilllist_open_tag.replace('>', f' Count="{len(new_borderfills)}">')
-            
-            # 업데이트된 BORDERFILLLIST 구성
-            updated_borderfilllist = f"{updated_open_tag}\n{updated_borderfilllist_content}\n{borderfilllist_close_tag}"
-            
-            # head_content에서 기존 BORDERFILLLIST를 새로운 것으로 교체
-            updated_head_content = re.sub(borderfilllist_pattern, updated_borderfilllist, head_content, flags=re.DOTALL)
-            
-            print(f"BorderFill 태그 {len(new_borderfills)}개 추가 완료 (ID: {next_id} ~ {next_id + len(new_borderfills) - 1})")
-            
-            # 추가된 BorderFill ID들을 table_border_fills에 매핑
-            # 기존 ID 값들을 새로운 ID 값으로 업데이트
+            for bf_xml in new_borderfills_xml:
+                bf_soup = BeautifulSoup(bf_xml, 'xml')
+                borderfill_list.append(bf_soup.find('BORDERFILL'))
+
+            borderfill_list['Count'] = str(len(borderfill_list.find_all('BORDERFILL')))
+
             self.table_border_fills = {
-                'first_row_left': str(next_id),      # 1번째 행 가장 왼쪽 (ID: 3 -> next_id)
-                'first_row_center': str(next_id + 1), # 1번째 행 가운데 (ID: 4 -> next_id + 1)
-                'first_row_right': str(next_id + 2),  # 1번째 행 가장 오른쪽 (ID: 5 -> next_id + 2)
-                'second_row_left': str(next_id + 3),  # 2번째 행 가장 왼쪽 (ID: 6 -> next_id + 3)
-                'second_row_center': str(next_id + 4), # 2번째 행 가운데 (ID: 7 -> next_id + 4)
-                'second_row_right': str(next_id + 5),  # 2번째 행 가장 오른쪽 (ID: 8 -> next_id + 5)
-                'last_row_left': str(next_id + 6),     # 마지막 행 가장 왼쪽 (ID: 9 -> next_id + 6)
-                'last_row_center': str(next_id + 7),   # 마지막 행 가운데 (ID: 10 -> next_id + 7)
-                'last_row_right': str(next_id + 8),    # 마지막 행 가장 오른쪽 (ID: 11 -> next_id + 8)
-                'middle_row_left': str(next_id + 9),   # 중간 행 가장 왼쪽 (ID: 12 -> next_id + 9)
-                'middle_row_center': str(next_id + 10), # 중간 행 가운데 (ID: 13 -> next_id + 10)
-                'middle_row_right': str(next_id + 11)   # 중간 행 가장 오른쪽 (ID: 14 -> next_id + 11)
+                'first_row_left': str(next_id),
+                'first_row_center': str(next_id + 1),
+                'first_row_right': str(next_id + 2),
+                'second_row_left': str(next_id + 3),
+                'second_row_center': str(next_id + 4),
+                'second_row_right': str(next_id + 5),
+                'last_row_left': str(next_id + 6),
+                'last_row_center': str(next_id + 7),
+                'last_row_right': str(next_id + 8),
+                'middle_row_left': str(next_id + 9),
+                'middle_row_center': str(next_id + 10),
+                'middle_row_right': str(next_id + 11)
             }
             
+            print(f"BorderFill 태그 {len(new_borderfills_xml)}개 추가 완료 (ID: {next_id} ~ {next_id + len(new_borderfills_xml) - 1})")
             print(f"테이블 테두리 BorderFill ID 매핑 업데이트 완료")
             
-            return updated_head_content
-            
+            # BeautifulSoup 객체를 문자열로 변환하여 반환하되, <?xml> 선언이 붙지 않도록 HEAD 태그 내용만 추출
+            head_tag = soup.find('HEAD')
+            if head_tag:
+                return str(head_tag)
+            return head_content
+
         except Exception as e:
             print(f"BorderFill 추가 중 오류 발생: {e}")
             return head_content

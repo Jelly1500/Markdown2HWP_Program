@@ -10,7 +10,7 @@ class MarkdownParser:
     """마크다운 텍스트를 구조화된 요소로 파싱하는 클래스"""
 
     def __init__(self):
-        self.parser = mistune.create_markdown()
+        self.parser = mistune
 
     # 👈 [수정] emoji 라이브러리를 사용하도록 메서드 변경
     def _remove_emojis(self, text):
@@ -23,7 +23,7 @@ class MarkdownParser:
         md_text_no_emojis = self._remove_emojis(md_text)
         
         # 2. HTML로 변환
-        html = self.parser(md_text_no_emojis)
+        html = self.parser.html(md_text_no_emojis)
 
         # 3. 디버깅을 위한 HTML 파일 저장
         with open("converted.html", "w", encoding="utf-8") as f:
