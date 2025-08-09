@@ -146,11 +146,9 @@ def split_hml_and_apply_defs(source_hml_path, output_directory):
 
     # 필터링된 리스트(necessary_p_blocks)를 사용하여 파일 생성
     for i, p_block in enumerate(necessary_p_blocks):
-        p_with_defs, replacements = re.subn(r'(<TEXT.*?>)', r'\1' + defs_block, p_block, 1)
-        if replacements == 0:
-            print(f"경고: {i+1}번째 문단에서 <TEXT> 태그를 찾지 못해 설정을 삽입할 수 없습니다.")
-
-        final_section = f"{section_open_tag}\n{p_with_defs}\n{section_close_tag}"
+        # 주의: 일부 문서에서 <TEXT> 내부에 SECDEF/COLDEF를 삽입하면 한/글이 충돌할 수 있음
+        # HEAD에는 원래의 SECDEF/COLDEF가 유지되므로, P 블록에는 추가 삽입하지 않고 그대로 사용
+        final_section = f"{section_open_tag}\n{p_block}\n{section_close_tag}"
         final_hml_content = f"{header_part}{body_open_tag}\n{final_section}\n{body_close_tag}{footer_part}"
 
         output_path = os.path.join(output_directory, f"{name}_paragraph_{i+1:03d}{ext}")

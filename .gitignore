@@ -6,6 +6,7 @@ __pycache__/
 # Converted documents
 convertedDocs/*
 !convertedDocs/.gitkeep
+md2hwp/convertedDocs/*
 
 # C extensions
 *.so
@@ -176,3 +177,28 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+# Local converted html debug
+converted.html
+
+# App logs
+md2hwp/logs/
+
+# Preprocessing caches/artifacts
+md2hwp/output_split_hml/
+md2hwp/images/
+md2hwp/Cropped_Images/
+
+# Build outputs
+Output/
+*.exe
+
+# Secrets / license
+license.dat
+
+# Editor/OS
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/

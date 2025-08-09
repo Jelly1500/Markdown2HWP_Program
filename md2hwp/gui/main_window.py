@@ -27,6 +27,7 @@ from ..utils.create_template_images import create_template_images
 from ..utils.GetHmlTags import extract_meaningful_p_tags
 from ..utils.deleteFolder import delete_folder_contents_permanently
 from ..converter.test import MainWindow as MappingWindow 
+from ..utils.logger import log_info, log_error
 
 from PySide6.QtCore import Qt, QEvent, QTimer, QRegularExpression, QPropertyAnimation, QEasingCurve, QSize, QThread, QObject, Signal
 
@@ -1050,6 +1051,15 @@ class MainWindow(QMainWindow):
         if not source_path:
             return
 
+        # 실행 전 캐시 디렉터리 정리(이전 실패/중단 잔여물이 영향을 주지 않도록) [[memory:5675327]]
+        try:
+            log_info("[FLOW] 전처리 시작 전 캐시 폴더 정리")
+            delete_folder_contents_permanently(self.default_split_hml_dir)
+            delete_folder_contents_permanently(self.default_image_dir)
+            delete_folder_contents_permanently(self.default_cropped_image_dir)
+        except Exception as _:
+            log_error("[FLOW] 캐시 폴더 정리 중 오류(무시)")
+
         hml_path = source_path
         if not source_path.lower().endswith('.hml'):
             self.status_handler.set_message("원본 파일을 HML로 변환 중입니다...", 5000)
@@ -1098,6 +1108,14 @@ class MainWindow(QMainWindow):
 
         if error_string:
             self.setEnabled(True)
+            # 에러 발생 시에도 캐시 폴더를 정리하여 다음 시도에 영향 없도록 처리
+            try:
+                log_info("[FLOW] 전처리 실패 → 캐시 폴더 정리")
+                delete_folder_contents_permanently(self.default_split_hml_dir)
+                delete_folder_contents_permanently(self.default_image_dir)
+                delete_folder_contents_permanently(self.default_cropped_image_dir)
+            except Exception:
+                log_error("[FLOW] 전처리 실패 시 캐시 정리 오류(무시)")
             QMessageBox.critical(self, "오류", f"템플릿 생성 준비 중 오류가 발생했습니다:\n{error_string}")
             return
 
