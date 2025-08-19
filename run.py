@@ -9,6 +9,7 @@ import keyboard
 import pystray
 from PIL import Image
 from PySide6.QtWidgets import QApplication, QMessageBox # GUI 및 메시지 박스
+from PySide6.QtGui import QIcon
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 MD2HWP_DIR = os.path.join(SCRIPT_DIR, 'md2hwp')
@@ -62,20 +63,66 @@ def setup_hotkey():
         else:
             print("경고: 단축키 설정 실패. 관리자 권한이 필요할 수 있습니다.")
 
-def create_image():
-    """시스템 트레이 아이콘 이미지를 생성하는 함수"""
-    # 아이콘 파일 경로 (run.py와 같은 위치에 icon.png 파일이 있다고 가정)
-    icon_path = os.path.join(SCRIPT_DIR, "icon.png")
+def _find_icon_path():
+    """앱 아이콘 파일 경로 탐색 (ico 우선)"""
+    candidates = [
+        os.path.join(SCRIPT_DIR, "icon.ico"),
+        os.path.join(SCRIPT_DIR, "icon.png"),
+    ]
+    for p in candidates:
+        if os.path.exists(p):
+            return p
+    return None
+
+
+def _trim_and_square(img: Image.Image, target_size=256) -> Image.Image:
+    """투명 여백을 잘라내고 정사각형 캔버스로 패딩 후 리사이즈"""
     try:
-        if os.path.exists(icon_path):
+        if img.mode != 'RGBA':
+            img = img.convert('RGBA')
+        alpha = img.split()[-1]
+        bbox = alpha.getbbox()
+        if bbox:
+            img = img.crop(bbox)
+        # 정사각형 패딩
+        w, h = img.size
+        side = max(w, h)
+        canvas = Image.new('RGBA', (side, side), (0, 0, 0, 0))
+        canvas.paste(img, ((side - w) // 2, (side - h) // 2))
+        # 리사이즈 (고해상도 준비)
+        if side != target_size:
+            canvas = canvas.resize((target_size, target_size), Image.LANCZOS)
+        return canvas
+    except Exception:
+        return img
+
+
+def create_image():
+    """시스템 트레이 아이콘 이미지를 생성 (여백 제거/리사이즈)"""
+    icon_path = _find_icon_path()
+    try:
+        if icon_path:
             print(f"아이콘 파일 로드: {icon_path}")
-            return Image.open(icon_path)
+            img = Image.open(icon_path)
+            # ICO인 경우 가장 큰 사이즈 추출 시도
+            try:
+                if hasattr(img, 'getimage'):
+                    # 256 또는 최대 사이즈 선택
+                    sizes = getattr(img, 'sizes', []) or []
+                    target = None
+                    if sizes:
+                        target = max(sizes)
+                    if target:
+                        img = img.getimage(target)
+            except Exception:
+                pass
+            return _trim_and_square(img, target_size=256)
         else:
-            print("아이콘 파일(icon.png)을 찾을 수 없습니다. 기본 이미지를 생성합니다.")
-            return Image.new('RGB', (64, 64), color = (73, 109, 137))
+            print("아이콘 파일(icon.ico/png)을 찾을 수 없습니다. 기본 이미지를 생성합니다.")
+            return Image.new('RGBA', (256, 256), color=(73, 109, 137, 255))
     except Exception as e:
         print(f"아이콘 로드 중 오류 발생: {e}. 기본 이미지를 생성합니다.")
-        return Image.new('RGB', (64, 64), color = (73, 109, 137))
+        return Image.new('RGBA', (256, 256), color=(73, 109, 137, 255))
 
 def setup_tray():
     """시스템 트레이 아이콘을 설정하고 실행하는 함수 (이전 버전 로직)"""
@@ -123,6 +170,15 @@ def main():
 
     app = QApplication(sys.argv)
     app.setApplicationName(APP_NAME)
+    # 앱/창 아이콘 명시적 설정 (윈도우/작업표시줄)
+    try:
+        app_icon_path = _find_icon_path()
+        if app_icon_path and os.path.exists(app_icon_path):
+            app.setWindowIcon(QIcon(app_icon_path))
+            if 'window' in globals() and window:
+                window.setWindowIcon(QIcon(app_icon_path))
+    except Exception as e:
+        print(f"앱 아이콘 설정 실패: {e}")
 
     perform_license_check() 
 
