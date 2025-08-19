@@ -2,26 +2,9 @@ from pyhwpx import Hwp
 import os
 import time
 import re
-import datetime
 from md2hwp.utils.logger import log_info, log_debug, log_error
 
-def _safe_jpg_path(preferred_path: str) -> str:
-    """파일명에 특수문자가 많을 때 안전한 JPG 경로를 생성."""
-    out_dir = os.path.dirname(preferred_path)
-    base = os.path.splitext(os.path.basename(preferred_path))[0]
-    safe_base = re.sub(r"[^0-9A-Za-z._-]+", "_", base) or "image"
-    candidate = os.path.join(out_dir, safe_base + ".jpg")
-    if not os.path.exists(candidate):
-        return candidate
-    ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    return os.path.join(out_dir, f"{safe_base}_{ts}.jpg")
-
-
-def _temp_jpg_path() -> str:
-    temp_dir = os.path.join(os.path.expanduser("~"), "AppData", "Local", "Temp", "md2hwp")
-    os.makedirs(temp_dir, exist_ok=True)
-    ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    return os.path.join(temp_dir, f"image_{ts}.jpg")
+# 성능 최적화: 불필요한 헬퍼 함수들 제거 (재시도 로직 간소화로 더 이상 불필요)
 
 
 def _wait_ready(hwp, timeout_sec: float = 5.0):
@@ -41,53 +24,36 @@ def _wait_ready(hwp, timeout_sec: float = 5.0):
         pass
 
 
-def convert_hwp_to_jpg(hwp, hwp_path: str, jpg_path: str):
+def convert_hwp_to_jpg(hwp, hwp_path: str, jpg_path: str, clear_doc: bool = False):
     """
-    [최종 개선] 파일을 열고 닫은 후, 각각의 작업이 완료될 때까지
-    상태 표시줄을 확인하여 안정성을 확보합니다.
+    성능 최적화: 문서 닫기를 선택적으로 수행하여 속도 향상
     """
     try:
         # 1. HWP 파일 열기
         
-        log_info(f"[JPG] 문서 열기: {os.path.basename(hwp_path)} (HWPML2X)")
         hwp.open(hwp_path, "HWPML2X")
-        _wait_ready(hwp, 3.0)
         
-        # 3. PrintToImage 액션을 사용해 JPG로 저장
-        # 1차: 요청된 경로
-        abs_jpg_path = os.path.abspath(jpg_path)
-        log_info(f"[JPG] 저장 시도: JPG → {abs_jpg_path}")
-        saved = hwp.save_as(abs_jpg_path, "JPG")
+        # JPG로 저장 (성능 최적화: 경로 처리 간소화)
+        saved = hwp.save_as(jpg_path, "JPG")
         if not saved:
-            # 2차: JPEG 필터명 시도
-            log_info(f"[JPG] 저장 재시도: JPEG → {abs_jpg_path}")
-            saved = hwp.save_as(abs_jpg_path, "JPEG")
+            saved = hwp.save_as(jpg_path, "JPEG")
+        
         if not saved:
-            # 3차: 안전한 파일명으로 재시도
-            safe_path = _safe_jpg_path(abs_jpg_path)
-            log_info(f"[JPG] 저장 재시도(안전이름): {safe_path}")
-            saved = hwp.save_as(safe_path, "JPG") or hwp.save_as(safe_path, "JPEG")
-            if saved:
-                log_info(f"[JPG] 성공(안전이름): {os.path.basename(safe_path)}")
-                return
-        if not saved:
-            # 4차: 임시 폴더 경로
-            temp_path = _temp_jpg_path()
-            log_info(f"[JPG] 저장 재시도(임시폴더): {temp_path}")
-            saved = hwp.save_as(temp_path, "JPG") or hwp.save_as(temp_path, "JPEG")
-            if saved:
-                log_info(f"[JPG] 성공(임시폴더): {os.path.basename(temp_path)}")
-                return
-        if not saved:
-            raise RuntimeError("JPG 저장 실패(JPG/JPEG, 안전이름/임시폴더 모두 실패)")
-        log_info(f"[JPG] 성공: {os.path.basename(abs_jpg_path)}")
-    finally:
-        # 현재 문서 닫기 시도 (다음 파일 대비)
+            raise RuntimeError(f"JPG 저장 실패: {os.path.basename(jpg_path)}")
+    except Exception as e:
+        # 오류 발생 시 문서 강제 정리
         try:
             hwp.Clear(1)
-            _wait_ready(hwp, 2.0)
-        except Exception:
+        except:
             pass
+        raise e
+    finally:
+        # 선택적 문서 정리 (메모리 관리용)
+        if clear_doc:
+            try:
+                hwp.Clear(1)
+            except:
+                pass
 
     # finally:
     #     # 4. 현재 열려있는 문서를 닫고, 닫기 작업이 완료될 때까지 대기
@@ -114,10 +80,8 @@ def convert_all_hmls_to_jpg(hml_dir, output_dir):
     """
     hwp = None
     try:
-        log_info("[JPG] 한/글 오토메이션 객체 생성 시작 (visible=True)")
-        # 일부 환경에서 비가시 모드가 대화상자/보안 경고로 인해 멈추는 경우가 있어 가시 모드 사용
-        hwp = Hwp(visible=True)
-        log_info("[JPG] 객체 생성 완료")
+        # 성능 최적화: 백그라운드에서 실행
+        hwp = Hwp(visible=False)
 
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
@@ -130,19 +94,30 @@ def convert_all_hmls_to_jpg(hml_dir, output_dir):
 
         log_info(f"[JPG] 총 {len(hml_files)}개의 HML 파일을 변환합니다.")
 
-        for hml_file in hml_files:
+        # 성능 최적화: 배치 처리 + 경로 처리 간소화
+        batch_size = 50  # 50개마다 메모리 정리
+        for i, hml_file in enumerate(hml_files):
             hml_path = os.path.join(hml_dir, hml_file)
+            # 파일명 정규화 최적화: 간단한 처리만
             base = os.path.splitext(hml_file)[0]
-            safe_base = re.sub(r"[^0-9A-Za-z._-]+", "_", base) or "paragraph"
-            jpg_file = safe_base + '.jpg'
-            jpg_path = os.path.join(output_dir, jpg_file)
+            if any(c in base for c in '<>:"|?*\\'):
+                safe_base = re.sub(r"[<>:\"|?*\\]+", "_", base) or "paragraph"
+            else:
+                safe_base = base
+            jpg_path = os.path.join(output_dir, safe_base + '.jpg')
 
-            log_info(f"[JPG] 변환 시작: {hml_file} -> {jpg_file}")
+            # 배치 마지막이거나 오류 발생 시에만 문서 정리
+            clear_doc = (i + 1) % batch_size == 0 or (i + 1) == len(hml_files)
+            
             try:
-                convert_hwp_to_jpg(hwp, hml_path, jpg_path)
+                convert_hwp_to_jpg(hwp, hml_path, jpg_path, clear_doc)
             except Exception as e:
-                log_error(f"[JPG] 이 항목 변환 실패: {hml_file} → 이유: {e}")
-                # 다음 항목 계속 처리
+                log_error(f"[JPG] 변환 실패: {hml_file} → {e}")
+                # 오류 발생 시 강제 정리
+                try:
+                    hwp.Clear(1)
+                except:
+                    pass
                 continue
 
     except Exception as e:
