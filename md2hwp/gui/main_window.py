@@ -323,9 +323,18 @@ class MainWindow(QMainWindow):
         # 텍스트 편집기에 헤딩 버튼 추가
         self.setup_heading_buttons_in_editor()
 
+        # 메뉴바 설정 (도움말 → 정보)
+        self.setup_menu_bar()
+
     def apply_styles(self):
         """스타일시트 적용"""
         self.setStyleSheet(IOS_LIKE_QSS)
+
+    def setup_menu_bar(self):
+        """메뉴바(도움말/정보) 구성 및 시그널 연결"""
+        help_menu = self.menuBar().addMenu("도움말")
+        about_action = help_menu.addAction("정보(About)")
+        about_action.triggered.connect(self.show_about_dialog)
 
     def setup_overlay(self):
         """드래그 앤 드롭 피드백을 위한 오버레이 설정"""
@@ -1043,6 +1052,30 @@ class MainWindow(QMainWindow):
         self.format_button_container.raise_()
         self.sub_heading_widget.raise_() # 헤딩 서브 위젯 올리기
         self.sub_format_widget.raise_() # 포맷 서브 위젯을 가장 위로 올리기
+
+
+    def show_about_dialog(self):
+        """앱 정보(About) 대화상자: Icons8 크레딧 포함"""
+        about_box = QMessageBox(self)
+        about_box.setWindowTitle("정보")
+        about_box.setIcon(QMessageBox.Icon.Information)
+        about_box.setTextFormat(Qt.TextFormat.RichText)
+        about_box.setTextInteractionFlags(Qt.TextInteractionFlag.TextBrowserInteraction)
+        about_box.setStandardButtons(QMessageBox.StandardButton.Ok)
+
+        about_html = (
+            f"""
+            <div style='min-width:360px;'>
+              <h3 style='margin:4px 0;'>{APP_NAME}</h3>
+              <div style='color:#666;margin-bottom:8px;'>버전 1.0</div>
+              <div style='margin-top:6px;'>
+                이 앱은 아이콘을 <a href='https://icons8.com'>Icons8.com</a>에서 제공합니다.
+              </div>
+            </div>
+            """
+        )
+        about_box.setText(about_html)
+        about_box.exec()
 
 
     def create_template_from_source(self):
