@@ -191,6 +191,7 @@ md2hwp/Cropped_Images/
 
 # Build outputs
 Output/
+run.dist/
 *.exe
 
 # Secrets / license
