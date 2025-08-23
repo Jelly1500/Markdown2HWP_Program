@@ -1,0 +1,60 @@
+# GitHub Actions 워크플로우의 이름
+name: Build Windows Executable
+
+# 이 워크플로우가 언제 실행될지를 정의합니다.
+on:
+  # 수동으로 Actions 탭에서 직접 실행할 수도 있게 합니다.
+  workflow_dispatch:
+
+# 실행될 작업(job)들을 정의합니다.
+jobs:
+  build:
+    # 작업이 실행될 가상 환경을 지정합니다. Windows 실행 파일(.exe)을 만들 것이므로 'windows-latest'를 사용합니다.
+    runs-on: windows-latest
+
+    # 작업의 단계(steps)들을 순서대로 정의합니다.
+    steps:
+      # 1. 저장소의 코드를 가상 환경으로 가져옵니다(Checkout).
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2. Python 3.12.10 버전을 설치합니다.
+      # requirements.txt에 명시된 PySide6와 다른 패키지들과의 호환성을 고려합니다.
+      - name: Set up Python 3.12.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.12.10
+
+      # 3. Python 의존성 패키지를 설치합니다.
+      # requirements.txt 파일에 있는 모든 라이브러리(Nuitka 포함)를 pip으로 설치합니다.
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nuitka
+
+      # 4. Nuitka로 Python 스크립트를 빌드합니다.
+      # 제공해주신 빌드 명령어를 그대로 사용합니다.
+      - name: Build with Nuitka
+        run: |
+          python -m nuitka --standalone --plugin-enable=pyside6 `
+            --windows-disable-console `
+            --nofollow-import-to=PyQt5 `
+            --include-package=mistune.plugins `
+            --include-package-data=emoji `
+            --follow-imports `
+            --include-data-dir=md2hwp/new_template=md2hwp/new_template `
+            --include-data-file=icon.png=icon.png `
+            --output-dir=build_output `
+            --output-filename="마크다운 HWP 변환기" `
+            run.py
+
+      # 5. 빌드 결과물을 업로드합니다.
+      # 빌드된 파일들을 'Windows-Build'라는 이름의 압축 파일(artifact)로 만들어 누구나 다운로드할 수 있게 합니다.
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          # 업로드될 아티팩트의 이름
+          name: Windows-Build
+          # 업로드할 파일/폴더의 경로
+          path: build_output/run.dist/
