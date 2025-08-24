@@ -8,7 +8,7 @@ import traceback
 from PySide6.QtWidgets import (QMainWindow, QTextEdit, QPushButton, QFileDialog, # <- QTextEdit 여기로 이동
                               QVBoxLayout, QHBoxLayout, QWidget, QStatusBar, QApplication,
                               QLabel, QSizePolicy, QFrame, QMenu, QMessageBox,
-                              QGroupBox, QToolButton, QInputDialog)
+                              QGroupBox, QToolButton, QInputDialog,QDialog, QDialogButtonBox, QTextEdit)
 from PySide6.QtCore import Qt, QEvent, QTimer, QRegularExpression, QPropertyAnimation, QEasingCurve, QSize
 # QtGui에서 필요한 클래스들을 가져옵니다.
 from PySide6.QtGui import (QIcon, QPalette, QColor, QDragEnterEvent, QDropEvent,
@@ -1055,28 +1055,143 @@ class MainWindow(QMainWindow):
 
 
     def show_about_dialog(self):
-        """앱 정보(About) 대화상자: Icons8 크레딧 포함"""
-        about_box = QMessageBox(self)
-        about_box.setWindowTitle("정보")
-        about_box.setIcon(QMessageBox.Icon.Information)
-        about_box.setTextFormat(Qt.TextFormat.RichText)
-        about_box.setTextInteractionFlags(Qt.TextInteractionFlag.TextBrowserInteraction)
-        about_box.setStandardButtons(QMessageBox.StandardButton.Ok)
+        """
+        [수정된] 앱 정보(About) 대화상자:
+        가독성을 위해 전체 폰트 크기를 키우고, 불필요한 스타일(기울임, 배경 상자)을 제거합니다.
+        """
+        dialog = QDialog(self)
+        dialog.setWindowTitle("정보")
 
-        about_html = (
-            f"""
-            <div style='min-width:360px;'>
-              <h3 style='margin:4px 0;'>{APP_NAME}</h3>
-              <div style='color:#666;margin-bottom:8px;'>버전 1.0</div>
-              <div style='margin-top:6px;'>
-                이 앱은 아이콘을 <a href='https://icons8.com'>Icons8.com</a>에서 제공합니다.
-              </div>
-            </div>
-            """
-        )
-        about_box.setText(about_html)
-        about_box.exec()
+        # --- 위젯 생성 ---
+        main_info_label = QLabel()
+        main_info_label.setTextFormat(Qt.TextFormat.RichText)
+        main_info_label.setOpenExternalLinks(True)
 
+        details_button = QPushButton("사용된 오픈소스 라이선스 보기")
+        details_button.setCheckable(True)
+        details_button.setChecked(False)
+
+        details_widget = QTextEdit()
+        details_widget.setReadOnly(True)
+        details_widget.setVisible(False)
+
+        footer_info_label = QLabel()
+        footer_info_label.setTextFormat(Qt.TextFormat.RichText)
+
+        button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok)
+
+        # --- 내용 설정 (HTML) ---
+        # 1. 가독성을 위해 기본 폰트 크기를 12px로 상향 조정
+        base_style = "font-size:12px; color:#333;"
+        
+        app_name_str = APP_NAME
+
+        # 제목(h3) 폰트 크기도 함께 조정 (15px -> 16px)
+        main_html = f"""
+        <div style='{base_style} min-width:400px;'>
+          <h3 style='font-size:16px; margin:4px 0;'>{app_name_str}</h3>
+          <div style='color:#666; margin-bottom:12px;'>버전 1.0</div>
+          <div style='margin-top:6px; margin-bottom:12px;'>
+            이 앱은 아이콘을 <a href='https://icons8.com' style='color:#007AFF;'>Icons8.com</a>에서 제공합니다.
+          </div>
+          <hr style='border:none; border-top:1px solid #ddd; margin:12px 0;'>
+        </div>
+        """
+        main_info_label.setText(main_html)
+
+        # 상세 목록의 폰트 크기도 11px로 상향 조정
+        details_html = f"""
+        <div style='font-size:11px;'>
+          <h4 style='margin:4px 0;color:#333; font-size:13px; font-weight:bold;'>사용된 오픈소스 라이선스:</h4>
+          <div style='color:#555;line-height:1.4;'>
+            • <b>PySide6 (Qt)</b>: LGPL v3 (선택됨) - Qt Company Ltd.<br>
+            • <b>requests</b>: Apache 2.0<br>
+            • <b>cryptography</b>: Apache 2.0 또는 BSD<br>
+            • <b>certifi</b>: MPL 2.0<br>
+            • <b>numpy</b>: BSD<br>
+            • <b>pandas</b>: BSD<br>
+            • <b>Pillow</b>: HPND<br>
+            • <b>lxml</b>: BSD<br>
+            • <b>keyring</b>: MIT<br>
+            • <b>beautifulsoup4</b>: MIT<br>
+            • <b>Markdown</b>: BSD<br>
+            • <b>cffi</b>: MIT<br>
+            • <b>charset-normalizer</b>: MIT<br>
+            • <b>et_xmlfile</b>: MIT<br>
+            • <b>idna</b>: BSD<br>
+            • <b>jaraco.classes</b>: MIT<br>
+            • <b>jaraco.context</b>: MIT<br>
+            • <b>jaraco.functools</b>: MIT<br>
+            • <b>keyboard</b>: MIT<br>
+            • <b>mistune</b>: BSD<br>
+            • <b>more-itertools</b>: MIT<br>
+            • <b>olefile</b>: BSD<br>
+            • <b>openpyxl</b>: MIT<br>
+            • <b>pycparser</b>: BSD<br>
+            • <b>pyhwpx</b>: MIT<br>
+            • <b>pyperclip</b>: BSD<br>
+            • <b>PySide6_Addons</b>: LGPL v3 (선택됨)<br>
+            • <b>PySide6_Essentials</b>: LGPL v3 (선택됨)<br>
+            • <b>python-dateutil</b>: Apache 2.0 또는 BSD<br>
+            • <b>pytz</b>: MIT<br>
+            • <b>pywin32</b>: PSF License<br>
+            • <b>pywin32-ctypes</b>: BSD<br>
+            • <b>shiboken6</b>: LGPL v3 (선택됨)<br>
+            • <b>six</b>: MIT<br>
+            • <b>soupsieve</b>: MIT<br>
+            • <b>typing_extensions</b>: PSF License<br>
+            • <b>tzdata</b>: Apache 2.0<br>
+            • <b>urllib3</b>: MIT<br>
+            • <b>zstandard</b>: BSD<br>
+            • <b>emoji</b>: BSD<br>
+            • <b>nuitka</b>: Apache 2.0
+          </div>
+        </div>
+        """
+        details_widget.setHtml(details_html)
+        details_widget.setFixedHeight(250)
+
+        # 2. 하단 안내 문구에서 기울임(<i> 태그)과 회색 배경 상자 스타일 제거
+        footer_html = f"""
+        <div style='{base_style}'>
+          <div style='font-size:11px; color:#888; margin-top:8px;'>
+            Qt와 Qt 로고는 The Qt Company Ltd.의 상표입니다.<br>
+            PySide6는 LGPL v3를 선택하여 사용합니다.<br>
+            certifi는 MPL 2.0 라이선스입니다 (수정 시에만 소스 공개 의무).
+          </div>
+          <div style='margin-top:12px; color:#666;'>
+            <b>📋 라이선스 정보 참조</b><br>
+            자세한 내용은 배포 폴더의 <b>THIRD_PARTY_LICENSES.md</b> 및 <b>licenses/</b> 폴더를 참조하십시오.
+          </div>
+        </div>
+        """
+        footer_info_label.setText(footer_html)
+
+        # --- 레이아웃 설정 ---
+        layout = QVBoxLayout(dialog)
+        layout.addWidget(main_info_label)
+        layout.addWidget(details_button)
+        layout.addWidget(details_widget)
+        layout.addWidget(footer_info_label)
+        layout.addWidget(button_box)
+        dialog.setLayout(layout)
+
+        # --- 시그널 연결 ---
+        button_box.accepted.connect(dialog.accept)
+
+        def toggle_details(checked):
+            details_widget.setVisible(checked)
+            if checked:
+                details_button.setText("오픈소스 라이선스 숨기기")
+            else:
+                details_button.setText("사용된 오픈소스 라이선스 보기")
+            dialog.adjustSize()
+
+        details_button.toggled.connect(toggle_details)
+
+        # --- 대화상자 실행 ---
+        dialog.adjustSize()
+        dialog.exec()
 
     def create_template_from_source(self):
         """[최종 수정] Worker 스레드를 사용하여 전체 템플릿 생성 워크플로우를 시작합니다."""

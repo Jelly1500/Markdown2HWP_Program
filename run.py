@@ -6,10 +6,10 @@ import os
 import sys
 import threading 
 import keyboard 
-import pystray
 from PIL import Image
-from PySide6.QtWidgets import QApplication, QMessageBox # GUI 및 메시지 박스
-from PySide6.QtGui import QIcon
+from PySide6.QtWidgets import QApplication, QMessageBox, QSystemTrayIcon, QMenu # GUI 및 메시지 박스, 시스템 트레이
+from PySide6.QtGui import QIcon, QAction
+from PySide6.QtCore import QTimer
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 MD2HWP_DIR = os.path.join(SCRIPT_DIR, 'md2hwp')
@@ -32,7 +32,7 @@ window = None           # MainWindow 인스턴스
 converter = None        # MD2HWPConverter 인스턴스
 window_visible = False  # 창 표시 여부 상태
 hotkey = "ctrl+alt+h"   # 창 토글 단축키
-tray_icon = None        # pystray 아이콘 객체
+tray_icon = None        # QSystemTrayIcon 객체
 
 def toggle_window():
     """창 표시/숨김 상태를 토글하는 함수"""
@@ -125,44 +125,49 @@ def create_image():
         return Image.new('RGBA', (256, 256), color=(73, 109, 137, 255))
 
 def setup_tray():
-    """시스템 트레이 아이콘을 설정하고 실행하는 함수 (이전 버전 로직)"""
+    """시스템 트레이 아이콘을 설정하고 실행하는 함수 (PySide6 QSystemTrayIcon 사용)"""
     global tray_icon, app 
 
-    icon_image = create_image()
-    tray_icon = pystray.Icon(APP_NAME, icon=icon_image, title=APP_NAME)
+    # QSystemTrayIcon이 지원되는지 확인
+    if not QSystemTrayIcon.isSystemTrayAvailable():
+        print("경고: 시스템 트레이가 지원되지 않습니다.")
+        return
 
-    def on_quit(icon, item):
-        """트레이 메뉴 '종료' 클릭 시 호출될 함수"""
-        print("트레이 메뉴: 종료 요청됨")
-        global window_visible
-        if window and window_visible:
-            window.hide()
-            window_visible = False
-        
+    # 아이콘 생성
+    icon_path = _find_icon_path()
+    if icon_path and os.path.exists(icon_path):
+        tray_icon = QSystemTrayIcon(QIcon(icon_path), app)
+    else:
+        # 기본 아이콘 생성
+        tray_icon = QSystemTrayIcon(app)
+        tray_icon.setIcon(QIcon(":/qt-project.org/styles/commonstyle/images/diropen.png"))
 
-        
-        # 트레이 아이콘 중지
-        icon.stop()     
-        
-        # 파이썬 프로세스 완전히 종료
-        if app:         
-            app.quit() 
+    tray_icon.setToolTip(APP_NAME)
 
+    # 트레이 메뉴 생성
+    tray_menu = QMenu()
+    
+    # 창 열기/닫기 액션
+    show_action = QAction("창 열기/닫기", tray_icon)
+    show_action.triggered.connect(toggle_window)
+    tray_menu.addAction(show_action)
+    
+    # 구분선
+    tray_menu.addSeparator()
+    
+    # 종료 액션
+    quit_action = QAction("종료", tray_icon)
+    quit_action.triggered.connect(lambda: app.quit())
+    tray_menu.addAction(quit_action)
 
-    def on_show(icon, item):
-        """트레이 메뉴 '창 열기/닫기' 클릭 시 호출될 함수"""
-        toggle_window()
-
-    tray_icon.menu = pystray.Menu(
-        pystray.MenuItem('창 열기/닫기', on_show, default=True), 
-        pystray.MenuItem(pystray.Menu.SEPARATOR, None),      
-        pystray.MenuItem('종료', on_quit)
-    )
-
-    tray_icon.on_click = lambda icon: toggle_window()
-
-
-    tray_icon.run_detached()
+    # 메뉴 설정
+    tray_icon.setContextMenu(tray_menu)
+    
+    # 트레이 아이콘 클릭 시 창 토글
+    tray_icon.activated.connect(lambda reason: toggle_window() if reason == QSystemTrayIcon.ActivationReason.Trigger else None)
+    
+    # 트레이 아이콘 표시
+    tray_icon.show()
 
 def main():
     """애플리케이션 메인 실행 함수"""
@@ -191,8 +196,6 @@ def main():
         event.ignore() 
     window.closeEvent = override_close_event
 
-
-
     setup_hotkey()
 
     setup_tray()
@@ -203,8 +206,8 @@ def main():
     exit_code = app.exec()
 
     # 프로그램 종료 시 모든 리소스 확실히 해제
-    if tray_icon and tray_icon.visible:
-        tray_icon.stop()
+    if tray_icon and tray_icon.isVisible():
+        tray_icon.hide()
     try:
         keyboard.unhook_all()
     except Exception as e:

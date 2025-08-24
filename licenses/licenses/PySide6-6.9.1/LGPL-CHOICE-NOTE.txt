@@ -1,0 +1,4 @@
+This package is dual-licensed by The Qt Company.
+For this distribution, the LGPL v3 option is selected.
+Please refer to https://www.gnu.org/licenses/lgpl-3.0.html
+and Qt's site for source/binaries.
