@@ -93,3 +93,6 @@ Set-ExecutionPolicy Restricted -Scope CurrentUser
 
 ### 📋 라이선스 정보 참조
 이 프로그램은 오픈소스 소프트웨어를 포함합니다. 자세한 내용은 배포 폴더의 **THIRD_PARTY_LICENSES.md** 및 **licenses/** 폴더를 참조하십시오.
+
+## 라이선스
+이 프로젝트는 [MIT 라이선스](LICENSE) 하에 배포됩니다.
