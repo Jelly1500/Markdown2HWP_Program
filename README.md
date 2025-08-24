@@ -41,10 +41,10 @@ Set-ExecutionPolicy Restricted -Scope CurrentUser
 이 프로젝트는 다음과 같은 오픈소스 라이브러리들을 사용합니다:
 
 ### 주요 라이브러리
-- **PySide6 (Qt for Python)**: LGPL v3 (선택됨) - The Qt Company Ltd.
-- **PySide6_Addons**: LGPL v3 (선택됨) - The Qt Company Ltd.
-- **PySide6_Essentials**: LGPL v3 (선택됨) - The Qt Company Ltd.
-- **shiboken6**: LGPL v3 (선택됨) - The Qt Company Ltd.
+- **PySide6 (Qt for Python)**: LGPL v3 - The Qt Company Ltd.
+- **PySide6_Addons**: LGPL v3 - The Qt Company Ltd.
+- **PySide6_Essentials**: LGPL v3  - The Qt Company Ltd.
+- **shiboken6**: LGPL v3  - The Qt Company Ltd.
 - **requests**: Apache 2.0 - Kenneth Reitz
 - **cryptography**: Apache 2.0 또는 BSD - Python Cryptographic Authority
 - **certifi**: MPL 2.0 - Kenneth Reitz
