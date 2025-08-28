@@ -200,36 +200,43 @@ class HWPMLGenerator:
             new_len = len(text.strip())
             
             new_template = template
-            if new_len > original_len * 1.2:  # 새 텍스트가 20% 이상 길면 셀 너비 조정
+            if new_len > original_len:  # 새 텍스트가 20% 이상 길면 셀 너비 조정
                 # 셀 너비 조정 로직 - 이 부분은 복잡하므로 기존 코드를 유지하되 클래스 변수 사용
                 from md2hwp.config import MAX_TABLE_WIDTH  # 필요한 경우에만 임포트
 
-                # 1. 먼저 CHAR 태그의 위치 확인
                 char_pos = template.find(longest_match.group(0))
-
-                # 2. CHAR 태그 이전의 가장 가까운 CELL 태그 찾기
                 cell_start_pattern = re.compile(r'<CELL\s+[^>]*?Width="(\d+)"')
                 cell_matches = list(cell_start_pattern.finditer(template[:char_pos]))
-
-                # 모든 셀 태그 찾기 (전체 셀 너비 계산을 위해)
+                
                 all_cell_pattern = re.compile(r'<CELL\s+[^>]*?Width="(\d+)"')
                 all_cell_matches = list(all_cell_pattern.finditer(template))
                 total_cells_width = sum(int(m.group(1)) for m in all_cell_matches)
-                
+
                 if cell_matches:
-                    nearest_cell = cell_matches[-1]  # 가장 마지막(가장 가까운) CELL
+                    nearest_cell = cell_matches[-1]
                     cell_width = int(nearest_cell.group(1))
                     
-                    # 셀 인덱스 추출 시도 (콜 주소)
-                    col_addr_match = re.search(r'ColAddr="(\d+)"', template[nearest_cell.start():nearest_cell.start()+200])
-                    col_addr = int(col_addr_match.group(1)) if col_addr_match else 0
-                    
-                    # 새 너비 계산
-                    ratio = new_len / max(original_len, 1)
-                    multiplier = min(max(ratio, 1.2), 5.0)  # 최대 5배로 제한
-                    new_cell_width = int(cell_width * multiplier)
-                    width_diff = new_cell_width - cell_width
-                    
+                    # 요구사항 2: 너비 계산 로직 변경
+                    # ======================================================================
+                    # 1. 원본 텍스트와 새 텍스트의 공백/일반 글자 수 계산 (strip() 적용된 기준)
+                    stripped_original = original_text.strip()
+                    original_space_count = stripped_original.count(' ')
+                    original_char_count = len(stripped_original) - original_space_count
+
+                    stripped_text = text.strip()
+                    new_space_count = stripped_text.count(' ')
+                    new_char_count = len(stripped_text) - new_space_count
+
+                    # 2. 글자 및 공백 개수 증가량 계산 (양수일 경우에만 반영)
+                    char_diff = max(0, new_char_count - original_char_count)
+                    space_diff = max(0, new_space_count - original_space_count)
+
+                    # 3. 너비 증가량(width_diff)을 정량적으로 계산
+                    # 일반 글자 1개당 width: 2885, 공백 1개당 width: 733
+                    width_diff = (char_diff * 2885) + (space_diff * 733)
+                    new_cell_width = cell_width + width_diff
+                    # ======================================================================
+
                     # 테이블 전체 너비 계산 및 조정
                     size_pattern = re.compile(r'<SIZE\s+[^>]*?Width="(\d+)"[^>]*?>')
                     table_section = template[:nearest_cell.start()]
@@ -242,22 +249,18 @@ class HWPMLGenerator:
                         
                         # 최대 테이블 너비를 초과하는 경우 조정
                         if new_table_width > MAX_TABLE_WIDTH:
-                            # 사용 가능한 여유 공간 계산
                             available_width = MAX_TABLE_WIDTH - (total_cells_width - cell_width)
-                            
-                            # 셀에 할당 가능한 최대 너비 계산
                             new_cell_width = min(available_width, new_cell_width)
                             width_diff = new_cell_width - cell_width
                             new_table_width = table_width + width_diff
                             
-                            # 너비가 음수가 되지 않도록 보호
                             if new_cell_width <= 0:
                                 new_cell_width = cell_width
                                 width_diff = 0
                                 new_table_width = table_width
                         
-                        # 셀 너비 변경
-                        if width_diff > 0:  # 너비를 늘릴 필요가 있는 경우만 변경
+                        # 셀 너비 변경 (너비가 증가한 경우에만)
+                        if width_diff > 0:
                             new_template = template[:nearest_cell.start(1)] + str(new_cell_width) + template[nearest_cell.end(1):]
                             
                             # 테이블 너비 변경
