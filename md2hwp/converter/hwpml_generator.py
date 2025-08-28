@@ -301,13 +301,17 @@ class HWPMLGenerator:
         """리스트를 HWPML로 변환"""
         hwpml = ""
         
-        ul_template = template_style['structure']
-        char_shape = template_style['char_shape']
+        # 기본 템플릿(1단 리스트)을 얻되, 깊이별 스타일은 아이템 처리 시 적용
+        ul_template = None
+        if getattr(self.template_manager, 'list_level_styles', None) and 0 in self.template_manager.list_level_styles:
+            ul_template = self.template_manager.list_level_styles[0].get('structure')
+        if not ul_template:
+            ul_template = template_style.get('structure')
         
         top_level_counter = 1
         
         for item in list_element['items']:
-            hwpml += self._process_list_item(item, ul_template, char_shape, top_level_counter, is_top_level=True)
+            hwpml += self._process_list_item(item, ul_template, None, top_level_counter, is_top_level=True)
             if item['is_ordered']:
                 top_level_counter += 1
         
@@ -322,9 +326,38 @@ class HWPMLGenerator:
         fragments = item['fragments']
         level = item.get('level', 0)
         is_ordered = item.get('is_ordered', False)
+        
+        # 현재 레벨에 맞는 스타일 결정
+        style_for_level = None
+        if getattr(self.template_manager, 'list_level_styles', None):
+            # 가장 가까운 하위 레벨 스타일로 폴백
+            max_defined = max(self.template_manager.list_level_styles.keys()) if self.template_manager.list_level_styles else 0
+            use_level = level if level in self.template_manager.list_level_styles else min(level, max_defined)
+            style_for_level = self.template_manager.list_level_styles.get(use_level)
 
-        p_tag_match = re.search(r'<P\s+([^>]+)>', template)
-        p_attributes = p_tag_match.group(1) if p_tag_match else 'Style="0"'
+        if not style_for_level:
+            # 하위 호환: 전달된 템플릿에서 P 속성 사용
+            p_tag_match = re.search(r'<P\s+([^>]+)>', template or '')
+            p_attributes = p_tag_match.group(1) if p_tag_match else 'Style="0"'
+            bullet_char_shape = self.template_manager.template_styles.get('ul', {}).get('bullet_char_shape', '0')
+            text_char_shape = self.template_manager.template_styles.get('ul', {}).get('text_char_shape', '0')
+            bullet_symbol = getattr(self.template_manager, 'bullet_symbol', '•')
+            ul_formats = self.template_manager.list_special_formats or {}
+            underline_shape = ul_formats.get("underline", text_char_shape)
+            strong_shape = ul_formats.get("strong", text_char_shape)
+            em_shape = ul_formats.get("em", text_char_shape)
+        else:
+            # 정의된 스타일에서 P 속성/CharShapes 추출
+            p_tag_match = re.search(r'<P\s+([^>]+)>', style_for_level.get('structure', ''))
+            p_attributes = p_tag_match.group(1) if p_tag_match else 'Style="0"'
+            bullet_char_shape = style_for_level.get('bullet_char_shape', '0')
+            text_char_shape = style_for_level.get('text_char_shape', '0')
+            bullet_symbol = self.template_manager.bullet_symbol_levels.get(level, self.template_manager.bullet_symbol)
+            fmt_levels = getattr(self.template_manager, 'list_special_formats_levels', {})
+            fmt_for_level = fmt_levels.get(level) or fmt_levels.get(min(level, max(fmt_levels.keys()) if fmt_levels else 0), {})
+            underline_shape = fmt_for_level.get("underline", text_char_shape)
+            strong_shape = fmt_for_level.get("strong", text_char_shape)
+            em_shape = fmt_for_level.get("em", text_char_shape)
 
         # 글머리 기호 설정
         if is_ordered:
@@ -336,16 +369,16 @@ class HWPMLGenerator:
                 prefix = f"{counter[level]}. "
                 counter[level] += 1
         else:
-            prefix = f"{self.template_manager.bullet_symbol} "
+            prefix = f"{bullet_symbol} "
 
         indent = "  " * level
         hwpml += f'<P {p_attributes}>'
 
         # 글머리 기호에는 템플릿의 bullet_char_shape 사용
-        hwpml += f'<TEXT CharShape="{self.template_manager.template_styles.get('ul', {}).get('bullet_char_shape', char_shape)}"><CHAR>{indent}{prefix}</CHAR></TEXT>'
+        hwpml += f'<TEXT CharShape="{bullet_char_shape}"><CHAR>{indent}{prefix}</CHAR></TEXT>'
 
         # 텍스트 내용에는 리스트의 text_char_shape 사용
-        text_char_shape = self.template_manager.template_styles.get('ul', {}).get('text_char_shape', '0')
+        # text_char_shape already computed above
         
         current_content = ''
         current_shape = text_char_shape
@@ -370,9 +403,9 @@ class HWPMLGenerator:
             if fragment_type == 'text':
                 new_shape = text_char_shape
             elif fragment_type == 'strong':
-                new_shape = self.template_manager.list_special_formats["strong"]
+                new_shape = strong_shape
             elif fragment_type == 'em':
-                new_shape = self.template_manager.list_special_formats["em"]
+                new_shape = em_shape
             elif fragment_type == 'a':
                 flush()
                 # 하이퍼링크 처리
@@ -382,7 +415,7 @@ class HWPMLGenerator:
                 href = fragment.get('href', '').replace('/', '\\/')
                 command = f"{href};1;0;0;"
                 
-                underline_shape = self.template_manager.list_special_formats["underline"]
+                # underline_shape already computed above
 
                 hwpml += f'<TEXT CharShape="{underline_shape}">'
                 hwpml += f'<FIELDBEGIN Command="{command}" Dirty="true" Editable="false" FieldId="{field_id}" InstId="{inst_id}" Property="0" Type="Hyperlink"/>'

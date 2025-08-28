@@ -60,7 +60,7 @@ SPECIAL_CHAR_MAPS = {
 
 # 스타일 매핑 순서
 STYLE_MAPPING_ORDER = [
-    'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'ul'
+    'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'ul1', 'ul2', 'ul3'
 ]
 
 # 기본 글머리표
