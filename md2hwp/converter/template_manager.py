@@ -15,6 +15,10 @@ class TemplateManager:
         self.template_styles = {}
         self.special_formats = {}
         self.list_special_formats = {}
+        self.list_special_formats_levels = {}
+        # 깊이별 리스트 스타일 저장 (0: 1단, 1: 2단, 2: 3단)
+        self.list_level_styles = {}
+        self.bullet_symbol_levels = {}
         # 테이블 테두리 영역별 BorderFill ID 매핑
         # 1번째 행: 왼쪽, 가운데, 오른쪽
         # 2번째 행: 왼쪽, 가운데, 오른쪽  
@@ -135,18 +139,36 @@ class TemplateManager:
                     'has_special_char_numbering': has_special_char_numbering
                 }
                 
-                # 순서 없는 리스트에서 글머리표 추출
-                if style_key == 'ul':
+                # 순서 없는 리스트에서 글머리표 추출 (깊이별: ul1, ul2, ul3)
+                if style_key.startswith('ul'):
                     text_matches = re.findall(r'<TEXT CharShape="(\d+)">', tag_structure)
+                    bullet_char_shape = self._extract_char_shape(tag_structure)
+                    text_char_shape = self._extract_char_shape(tag_structure)
                     if len(text_matches) >= 2:
-                        self.template_styles[style_key]['bullet_char_shape'] = text_matches[0]
-                        self.template_styles[style_key]['text_char_shape'] = text_matches[1]
-                    else:
-                        self.template_styles[style_key]['bullet_char_shape'] = self._extract_char_shape(tag_structure)
-                        self.template_styles[style_key]['text_char_shape'] = self._extract_char_shape(tag_structure)
+                        bullet_char_shape = text_matches[0]
+                        text_char_shape = text_matches[1]
+                    self.template_styles[style_key]['bullet_char_shape'] = bullet_char_shape
+                    self.template_styles[style_key]['text_char_shape'] = text_char_shape
+
+                    # 레벨 인덱스 계산 (ul1->0, ul2->1, ul3->2)
+                    try:
+                        level_index = int(style_key.replace('ul', '')) - 1
+                    except Exception:
+                        level_index = 0
+
+                    self.list_level_styles[level_index] = {
+                        'structure': tag_structure,
+                        'para_shape': self.template_styles[style_key]['para_shape'],
+                        'bullet_char_shape': bullet_char_shape,
+                        'text_char_shape': text_char_shape
+                    }
+
                     bullet = self._extract_bullet_symbol(tag_structure)
                     if bullet:
-                        self.bullet_symbol = bullet
+                        self.bullet_symbol_levels[level_index] = bullet
+                    else:
+                        # 기본값 사용
+                        self.bullet_symbol_levels.setdefault(level_index, DEFAULT_BULLET_SYMBOL)
     
     def _extract_bullet_symbol(self, structure):
         """순서 없는 리스트 구조에서 글머리표 특수기호 추출"""
@@ -252,31 +274,59 @@ class TemplateManager:
             strong_em_underline_p = self._clone_charshape(base_charshape_p, p_formats['strong_em_underline']); strong_em_underline_p.append(soup.new_tag("BOLD")); strong_em_underline_p.append(soup.new_tag("ITALIC")); strong_em_underline_p.append(soup.new_tag("UNDERLINE", Color="16711680", Shape="Solid", Type="Bottom")); charshapepool.append(strong_em_underline_p)
             last_id += 7
 
-        # --- 2. 리스트('ul') 기반 특수 서식 생성 ---
-        base_charshape_id_ul = self.template_styles.get('ul', {}).get('text_char_shape')
-        base_charshape_ul = next((cs for cs in all_charshapes if cs.get('Id') == base_charshape_id_ul), None)
-
-        if base_charshape_ul is None:
-            print(f"경고: 'ul' 스타일에 대한 ID {base_charshape_id_ul}의 CHARSHAPE을 찾을 수 없습니다. 'p' 스타일 기반을 사용합니다.")
-            base_charshape_ul = base_charshape_p # Fallback to paragraph style
-
-        if base_charshape_ul:
-            ul_formats = {
-                'strong': str(last_id + 1), 'em': str(last_id + 2), 'underline': str(last_id + 3),
-                'strong_em': str(last_id + 4), 'strong_underline': str(last_id + 5), 'em_underline': str(last_id + 6),
-                'strong_em_underline': str(last_id + 7)
-            }
-            self.list_special_formats = ul_formats
-            
-            # Clone and append for 'ul'
-            strong_ul = self._clone_charshape(base_charshape_ul, ul_formats['strong']); strong_ul.append(soup.new_tag("BOLD")); charshapepool.append(strong_ul)
-            em_ul = self._clone_charshape(base_charshape_ul, ul_formats['em']); em_ul.append(soup.new_tag("ITALIC")); charshapepool.append(em_ul)
-            underline_ul = self._clone_charshape(base_charshape_ul, ul_formats['underline']); underline_ul.append(soup.new_tag("UNDERLINE", Color="16711680", Shape="Solid", Type="Bottom")); charshapepool.append(underline_ul)
-            strong_em_ul = self._clone_charshape(base_charshape_ul, ul_formats['strong_em']); strong_em_ul.append(soup.new_tag("BOLD")); strong_em_ul.append(soup.new_tag("ITALIC")); charshapepool.append(strong_em_ul)
-            strong_underline_ul = self._clone_charshape(base_charshape_ul, ul_formats['strong_underline']); strong_underline_ul.append(soup.new_tag("BOLD")); strong_underline_ul.append(soup.new_tag("UNDERLINE", Color="16711680", Shape="Solid", Type="Bottom")); charshapepool.append(strong_underline_ul)
-            em_underline_ul = self._clone_charshape(base_charshape_ul, ul_formats['em_underline']); em_underline_ul.append(soup.new_tag("ITALIC")); em_underline_ul.append(soup.new_tag("UNDERLINE", Color="16711680", Shape="Solid", Type="Bottom")); charshapepool.append(em_underline_ul)
-            strong_em_underline_ul = self._clone_charshape(base_charshape_ul, ul_formats['strong_em_underline']); strong_em_underline_ul.append(soup.new_tag("BOLD")); strong_em_underline_ul.append(soup.new_tag("ITALIC")); strong_em_underline_ul.append(soup.new_tag("UNDERLINE", Color="16711680", Shape="Solid", Type="Bottom")); charshapepool.append(strong_em_underline_ul)
-            last_id += 7
+        # --- 2. 리스트(ul1/ul2/ul3) 기반 특수 서식 생성 ---
+        if self.list_level_styles:
+            # 깊이별로 각각 생성
+            for level_index in sorted(self.list_level_styles.keys()):
+                base_id = self.list_level_styles[level_index].get('text_char_shape')
+                base_cs = next((cs for cs in all_charshapes if cs.get('Id') == base_id), None)
+                if base_cs is None:
+                    print(f"경고: 'ul{level_index+1}' 스타일의 텍스트 CharShape {base_id}를 찾을 수 없습니다. 'p' 스타일 기반을 사용합니다.")
+                    base_cs = base_charshape_p
+                if not base_cs:
+                    continue
+                ul_formats = {
+                    'strong': str(last_id + 1), 'em': str(last_id + 2), 'underline': str(last_id + 3),
+                    'strong_em': str(last_id + 4), 'strong_underline': str(last_id + 5), 'em_underline': str(last_id + 6),
+                    'strong_em_underline': str(last_id + 7)
+                }
+                # 저장: 깊이별 특수 서식
+                self.list_special_formats_levels[level_index] = ul_formats
+                if level_index == 0:
+                    # 하위 호환: 기존 속성에도 저장
+                    self.list_special_formats = ul_formats
+                # Clone and append for this level base
+                strong_ul = self._clone_charshape(base_cs, ul_formats['strong']); strong_ul.append(soup.new_tag("BOLD")); charshapepool.append(strong_ul)
+                em_ul = self._clone_charshape(base_cs, ul_formats['em']); em_ul.append(soup.new_tag("ITALIC")); charshapepool.append(em_ul)
+                underline_ul = self._clone_charshape(base_cs, ul_formats['underline']); underline_ul.append(soup.new_tag("UNDERLINE", Color="16711680", Shape="Solid", Type="Bottom")); charshapepool.append(underline_ul)
+                strong_em_ul = self._clone_charshape(base_cs, ul_formats['strong_em']); strong_em_ul.append(soup.new_tag("BOLD")); strong_em_ul.append(soup.new_tag("ITALIC")); charshapepool.append(strong_em_ul)
+                strong_underline_ul = self._clone_charshape(base_cs, ul_formats['strong_underline']); strong_underline_ul.append(soup.new_tag("BOLD")); strong_underline_ul.append(soup.new_tag("UNDERLINE", Color="16711680", Shape="Solid", Type="Bottom")); charshapepool.append(strong_underline_ul)
+                em_underline_ul = self._clone_charshape(base_cs, ul_formats['em_underline']); em_underline_ul.append(soup.new_tag("ITALIC")); em_underline_ul.append(soup.new_tag("UNDERLINE", Color="16711680", Shape="Solid", Type="Bottom")); charshapepool.append(em_underline_ul)
+                strong_em_underline_ul = self._clone_charshape(base_cs, ul_formats['strong_em_underline']); strong_em_underline_ul.append(soup.new_tag("BOLD")); strong_em_underline_ul.append(soup.new_tag("ITALIC")); strong_em_underline_ul.append(soup.new_tag("UNDERLINE", Color="16711680", Shape="Solid", Type="Bottom")); charshapepool.append(strong_em_underline_ul)
+                last_id += 7
+        else:
+            # 기존 방식(단일 ul) 하위 호환
+            base_charshape_id_ul = self.template_styles.get('ul', {}).get('text_char_shape')
+            base_charshape_ul = next((cs for cs in all_charshapes if cs.get('Id') == base_charshape_id_ul), None)
+            if base_charshape_ul is None:
+                print(f"경고: 'ul' 스타일에 대한 ID {base_charshape_id_ul}의 CHARSHAPE을 찾을 수 없습니다. 'p' 스타일 기반을 사용합니다.")
+                base_charshape_ul = base_charshape_p
+            if base_charshape_ul:
+                ul_formats = {
+                    'strong': str(last_id + 1), 'em': str(last_id + 2), 'underline': str(last_id + 3),
+                    'strong_em': str(last_id + 4), 'strong_underline': str(last_id + 5), 'em_underline': str(last_id + 6),
+                    'strong_em_underline': str(last_id + 7)
+                }
+                self.list_special_formats = ul_formats
+                self.list_special_formats_levels[0] = ul_formats
+                strong_ul = self._clone_charshape(base_charshape_ul, ul_formats['strong']); strong_ul.append(soup.new_tag("BOLD")); charshapepool.append(strong_ul)
+                em_ul = self._clone_charshape(base_charshape_ul, ul_formats['em']); em_ul.append(soup.new_tag("ITALIC")); charshapepool.append(em_ul)
+                underline_ul = self._clone_charshape(base_charshape_ul, ul_formats['underline']); underline_ul.append(soup.new_tag("UNDERLINE", Color="16711680", Shape="Solid", Type="Bottom")); charshapepool.append(underline_ul)
+                strong_em_ul = self._clone_charshape(base_charshape_ul, ul_formats['strong_em']); strong_em_ul.append(soup.new_tag("BOLD")); strong_em_ul.append(soup.new_tag("ITALIC")); charshapepool.append(strong_em_ul)
+                strong_underline_ul = self._clone_charshape(base_charshape_ul, ul_formats['strong_underline']); strong_underline_ul.append(soup.new_tag("BOLD")); strong_underline_ul.append(soup.new_tag("UNDERLINE", Color="16711680", Shape="Solid", Type="Bottom")); charshapepool.append(strong_underline_ul)
+                em_underline_ul = self._clone_charshape(base_charshape_ul, ul_formats['em_underline']); em_underline_ul.append(soup.new_tag("ITALIC")); em_underline_ul.append(soup.new_tag("UNDERLINE", Color="16711680", Shape="Solid", Type="Bottom")); charshapepool.append(em_underline_ul)
+                strong_em_underline_ul = self._clone_charshape(base_charshape_ul, ul_formats['strong_em_underline']); strong_em_underline_ul.append(soup.new_tag("BOLD")); strong_em_underline_ul.append(soup.new_tag("ITALIC")); strong_em_underline_ul.append(soup.new_tag("UNDERLINE", Color="16711680", Shape="Solid", Type="Bottom")); charshapepool.append(strong_em_underline_ul)
+                last_id += 7
 
         self.template_content = str(soup)
 
@@ -583,9 +633,10 @@ class TemplateManager:
 
             # --- ★★★ 신규 로직 (BODY 내용 생성 및 교체) ★★★ ---
 
-            # 1. 8개의 플레이스홀더 P 태그를 생성합니다.
+            # 1. 플레이스홀더 P 태그를 스타일 매핑 개수만큼 생성합니다.
             placeholder_p_tag = '<P ParaShape="0" Style="0"><TEXT CharShape="0"><CHAR>###</CHAR></TEXT></P>'
-            p_tag_list = [placeholder_p_tag] * 8
+            total_slots = len(self.style_mapping_order)
+            p_tag_list = [placeholder_p_tag] * total_slots
             
             # 2. 입력받은 p_tag_mappings에 따라 플레이스홀더를 실제 P 태그로 교체합니다.
             for line_num_str, new_p_tag in p_tag_mappings.items():
