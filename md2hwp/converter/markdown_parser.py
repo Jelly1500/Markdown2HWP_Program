@@ -75,7 +75,7 @@ class MarkdownParser:
                     'fragments': self._extract_blockquote_fragments(tag)
                 })
             elif tag.name == 'p':
-                if tag.find(['strong', 'b', 'em', 'i', 'a', 'br']):
+                if tag.find(['strong', 'b', 'em', 'i', 'a', 'br', 'code', 'del']):
                     elements.append({
                         'type': 'p',
                         'content': tag.get_text(),
@@ -172,6 +172,10 @@ class MarkdownParser:
                     'content': prev_space + child.get_text() + next_space, 
                     'href': child.get('href', '')
                 })
+            elif child.name == 'code':
+                fragments.append({'type': 'code', 'content': child.get_text()})
+            elif child.name == 'del':
+                fragments.append({'type': 'del', 'content': child.get_text()})
             elif child.name == 'br':
                 fragments.append({'type': 'br'})
 
@@ -266,6 +270,10 @@ class MarkdownParser:
                         'content': prev_space + child.get_text() + next_space, 
                         'href': child.get('href', '')
                     })
+                elif child.name == 'code':
+                    item_fragments.append({'type': 'code', 'content': child.get_text()})
+                elif child.name == 'del':
+                    item_fragments.append({'type': 'del', 'content': child.get_text()})
                 elif child.name == 'br':
                     item_fragments.append({'type': 'br'})
                 elif child.name not in ['ul', 'ol']:
@@ -328,6 +336,10 @@ class MarkdownParser:
                     item_fragments.append({'type': 'em', 'content': child.get_text()})
                 elif child.name == 'a':
                     item_fragments.append({'type': 'a', 'content': child.get_text(), 'href': child.get('href', '')})
+                elif child.name == 'code':
+                    item_fragments.append({'type': 'code', 'content': child.get_text()})
+                elif child.name == 'del':
+                    item_fragments.append({'type': 'del', 'content': child.get_text()})
                 elif child.name == 'br':
                     item_fragments.append({'type': 'br'})
                 elif child.name not in ['ul', 'ol']:

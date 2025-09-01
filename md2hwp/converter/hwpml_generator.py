@@ -138,6 +138,10 @@ class HWPMLGenerator:
                 new_shape = self.template_manager.special_formats["strong"]
             elif fragment_type == 'em':
                 new_shape = self.template_manager.special_formats["em"]
+            elif fragment_type == 'code':
+                new_shape = normal_char_shape  # 코드는 일반 텍스트 스타일 사용
+            elif fragment_type == 'del':
+                new_shape = normal_char_shape  # 취소선은 일반 텍스트 스타일 사용
             elif fragment_type == 'a':
                 flush()
                 field_id = self.id_manager.next_field_id()
@@ -410,6 +414,10 @@ class HWPMLGenerator:
                 new_shape = strong_shape
             elif fragment_type == 'em':
                 new_shape = em_shape
+            elif fragment_type == 'code':
+                new_shape = text_char_shape  # 코드는 일반 텍스트 스타일 사용
+            elif fragment_type == 'del':
+                new_shape = text_char_shape  # 취소선은 일반 텍스트 스타일 사용 (취소선 효과는 별도 처리 필요)
             elif fragment_type == 'a':
                 flush()
                 # 하이퍼링크 처리
