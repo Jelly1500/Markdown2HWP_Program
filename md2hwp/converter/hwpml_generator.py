@@ -361,7 +361,11 @@ class HWPMLGenerator:
 
         # 글머리 기호 설정
         if is_ordered:
-            if is_top_level:
+            # start_value가 있으면 해당 값을 사용
+            start_value = item.get('start_value')
+            if start_value is not None:
+                prefix = f"{start_value}. "
+            elif is_top_level:
                 prefix = f"{top_level_counter}. "
             else:
                 if level not in counter:

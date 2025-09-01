@@ -197,6 +197,14 @@ class MarkdownParser:
         items = []
         is_ordered = list_tag.name == 'ol'
         
+        # ol 태그의 start 속성 추출
+        start_value = 1
+        if is_ordered and list_tag.get('start'):
+            try:
+                start_value = int(list_tag.get('start'))
+            except (ValueError, TypeError):
+                start_value = 1
+        
         for li in list_tag.find_all('li', recursive=False):
             item_fragments = []
             nested_lists = []
@@ -267,19 +275,28 @@ class MarkdownParser:
                 else:
                     nested_lists.append(child)
             
-            item_info = {
-                'fragments': item_fragments,
-                'is_ordered': is_ordered,
-                'level': 0
-            }
-            
-            if nested_lists:
-                item_info['nested_items'] = []
+            # 빈 li 태그에 중첩 리스트만 있는 경우 특별 처리
+            if not item_fragments and nested_lists:
+                # 빈 상위 항목 없이 중첩 리스트만 직접 추가
                 for nested_list in nested_lists:
-                    nested_items = self._extract_nested_list_items(nested_list, 1)
-                    item_info['nested_items'].extend(nested_items)
-            
-            items.append(item_info)
+                    nested_items = self._extract_nested_list_items(nested_list, 0)  # level을 0으로 수정
+                    items.extend(nested_items)
+            else:
+                # 일반적인 경우
+                item_info = {
+                    'fragments': item_fragments,
+                    'is_ordered': is_ordered,
+                    'level': 0,
+                    'start_value': start_value if is_ordered else None
+                }
+                
+                if nested_lists:
+                    item_info['nested_items'] = []
+                    for nested_list in nested_lists:
+                        nested_items = self._extract_nested_list_items(nested_list, 1)
+                        item_info['nested_items'].extend(nested_items)
+                
+                items.append(item_info)
         
         return items
     
@@ -287,6 +304,14 @@ class MarkdownParser:
         """중첩 리스트 항목 추출"""
         items = []
         is_ordered = list_tag.name == 'ol'
+        
+        # ol 태그의 start 속성 추출
+        start_value = 1
+        if is_ordered and list_tag.get('start'):
+            try:
+                start_value = int(list_tag.get('start'))
+            except (ValueError, TypeError):
+                start_value = 1
         
         for li in list_tag.find_all('li', recursive=False):
             item_fragments = []
@@ -315,7 +340,8 @@ class MarkdownParser:
             item_info = {
                 'fragments': item_fragments,
                 'is_ordered': is_ordered,
-                'level': level
+                'level': level,
+                'start_value': start_value if is_ordered else None
             }
             
             if nested_lists:
