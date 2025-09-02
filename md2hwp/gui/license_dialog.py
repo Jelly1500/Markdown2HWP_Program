@@ -14,8 +14,8 @@ class LicenseDialog(QDialog):
         self.setWindowFlags(self.windowFlags() & ~Qt.WindowContextHelpButtonHint) # 도움말 버튼 제거
 
         self.key_input = QLineEdit()
-        # 기본 라이선스 키 입력
-        self.key_input.setText("TEST-KEY-1234-ABCD")
+        # 기본값은 빈 문자열로 설정 (테스트 키 자동 입력 방지)
+        self.key_input.setText("")
         self.key_input.setPlaceholderText("라이선스 키를 입력하세요 (예: XXXX-XXXX-XXXX)")
         self.ok_button = QPushButton("확인")
         self.cancel_button = QPushButton("취소")

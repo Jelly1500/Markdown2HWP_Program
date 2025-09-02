@@ -89,38 +89,60 @@ def perform_license_check():
 
     # 레지스트리에서 키 확인 (설치 프로그램에서 등록한 경우)
     registry_key = get_registry_license_key()
-    if registry_key == "TEST-KEY-1234-ABCD":
-        print("INFO: 설치 과정에서 등록된 유효한 라이선스 키를 레지스트리에서 찾았습니다.")
-        current_time = datetime.datetime.now()
-        # 자격 증명 관리자에도 저장하여 다음 실행 시 일관성 유지
-        save_license_info({"key": registry_key, "last_checked": current_time.isoformat()})
-        return  # 유효한 키가 확인되면 추가 검증 없이 진행
-    
-    # 레지스트리에 키가 없으면 저장된 정보 확인
-    stored_info = load_license_info()
-    current_time = datetime.datetime.now()
-    needs_validation = True
-    license_key_to_use = None
-    is_first_run = False
-
-    if stored_info and isinstance(stored_info, dict) and "key" in stored_info and "last_checked" in stored_info:
-        license_key_to_use = stored_info["key"]
-        try:
-            last_checked_str = stored_info["last_checked"]
-            last_checked_time = datetime.datetime.fromisoformat(last_checked_str)
-            time_diff = current_time - last_checked_time
-            if 0 <= time_diff.days < LICENSE_CHECK_INTERVAL_DAYS:
-                print(f"라이선스 유효 기간({LICENSE_CHECK_INTERVAL_DAYS}일) 내입니다. 서버 검증 생략.")
-                needs_validation = False
-            else:
-                print(f"라이선스 검증 주기({LICENSE_CHECK_INTERVAL_DAYS}일)가 지났습니다. 서버 검증 필요.")
-                needs_validation = True
-        except (ValueError, TypeError) as e:
-            print(f"저장된 날짜 형식 오류 또는 타입 오류 ({e}). 재검증 필요.")
+    if registry_key:
+        print("INFO: 레지스트리에서 라이선스 키를 찾았습니다.")
+        # 테스트 키인 경우 서버 검증 없이 처리
+        if registry_key == "TEST-KEY-1234-ABCD":
+            print("INFO: 테스트 키를 감지했습니다. 서버 검증 없이 진행합니다.")
+            current_time = datetime.datetime.now()
+            save_license_info({"key": registry_key, "last_checked": current_time.isoformat()})
+            return  # 테스트 키는 검증 없이 진행
+        else:
+            print("INFO: 일반 라이선스 키를 감지했습니다. 서버 검증을 진행합니다.")
+            current_time = datetime.datetime.now()
+            save_license_info({"key": registry_key, "last_checked": None})
+            license_key_to_use = registry_key
             needs_validation = True
-            delete_license_info()
-            license_key_to_use = None
-            is_first_run = True
+            is_first_run = False
+    else:
+        # 레지스트리에 키가 없으면 저장된 정보 확인
+        stored_info = load_license_info()
+        current_time = datetime.datetime.now()
+        needs_validation = True
+        license_key_to_use = None
+        is_first_run = False
+
+    if stored_info and isinstance(stored_info, dict) and "key" in stored_info:
+        license_key_to_use = stored_info["key"]
+        # 테스트 키인 경우 서버 검증 없이 처리
+        if license_key_to_use == "TEST-KEY-1234-ABCD":
+            print("저장된 테스트 키를 찾았습니다. 서버 검증 없이 진행합니다.")
+            needs_validation = False
+            is_first_run = False
+        else:
+            print("저장된 일반 라이선스 정보를 찾았습니다.")
+            # 캐싱 기간 확인
+            try:
+                if "last_checked" in stored_info and stored_info["last_checked"]:
+                    last_checked_str = stored_info["last_checked"]
+                    last_checked_time = datetime.datetime.fromisoformat(last_checked_str)
+                    time_diff = current_time - last_checked_time
+                    if 0 <= time_diff.days < LICENSE_CHECK_INTERVAL_DAYS:
+                        print(f"라이선스 유효 기간({LICENSE_CHECK_INTERVAL_DAYS}일) 내입니다. 서버 검증 생략.")
+                        needs_validation = False
+                    else:
+                        print(f"라이선스 검증 주기({LICENSE_CHECK_INTERVAL_DAYS}일)가 지났습니다. 서버 검증 필요.")
+                        needs_validation = True
+                else:
+                    print("저장된 검증 시간 정보가 없습니다. 서버 검증을 진행합니다.")
+                    needs_validation = True
+            except (ValueError, TypeError) as e:
+                print(f"저장된 날짜 형식 오류 또는 타입 오류 ({e}). 재검증 필요.")
+                needs_validation = True
+                delete_license_info()
+                license_key_to_use = None
+                is_first_run = True
+            is_first_run = False
     else:
         print("저장된 라이선스 정보 없음. 첫 실행으로 간주.")
         is_first_run = True

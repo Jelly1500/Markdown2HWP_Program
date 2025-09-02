@@ -66,13 +66,21 @@ def load_license_info() -> dict | None:
     또는 설치 과정에서 레지스트리에 저장된 키가 있으면 그것을 사용"""
     # 먼저 레지스트리에서 라이선스 키 확인
     license_key = get_registry_license_key()
-    if license_key and license_key == "TEST-KEY-1234-ABCD":  # 하드코딩된 테스트 키와 비교
-        print("INFO [LicenseUtils]: 레지스트리에서 유효한 라이선스 키를 찾았습니다.")
-        # 라이선스 키를 자격 증명 관리자에도 저장하여 추후 검증 절차 간소화
-        current_time = datetime.datetime.now()
-        license_info = {"key": license_key, "last_checked": current_time.isoformat()}
-        save_license_info(license_info)
-        return license_info
+    if license_key:
+        print("INFO [LicenseUtils]: 레지스트리에서 라이선스 키를 찾았습니다.")
+        # 테스트 키인 경우 서버 검증 없이 처리
+        if license_key == "TEST-KEY-1234-ABCD":
+            print("INFO [LicenseUtils]: 테스트 키를 감지했습니다. 서버 검증 없이 진행합니다.")
+            current_time = datetime.datetime.now()
+            license_info = {"key": license_key, "last_checked": current_time.isoformat()}
+            save_license_info(license_info)
+            return license_info
+        else:
+            print("INFO [LicenseUtils]: 일반 라이선스 키를 감지했습니다. 서버 검증이 필요합니다.")
+            current_time = datetime.datetime.now()
+            license_info = {"key": license_key, "last_checked": None}  # None으로 설정하여 항상 검증 필요
+            save_license_info(license_info)
+            return license_info
     
     # 레지스트리에 유효한 키가 없으면 자격 증명 관리자 확인
     try:

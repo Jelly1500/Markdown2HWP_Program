@@ -68,6 +68,6 @@ DEFAULT_BULLET_SYMBOL = "•"
 
 LICENSE_SERVER_URL = "https://license-gateway-7unzoje4.uc.gateway.dev/validate"
 LICENSE_FILE_PATH = "license.dat" 
-LICENSE_CHECK_INTERVAL_DAYS = 7 
+LICENSE_CHECK_INTERVAL_DAYS = 3  # 일반 라이선스 키는 3일마다 서버 검증 
 
 API_GATEWAY_KEY = "AIzaSyDdyQEx9vAD73Yz-J7rCPo9n8IzcoFp-N0"
