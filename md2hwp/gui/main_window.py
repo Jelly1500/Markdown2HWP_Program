@@ -9,7 +9,7 @@ from PySide6.QtWidgets import (QMainWindow, QTextEdit, QPushButton, QFileDialog,
                               QVBoxLayout, QHBoxLayout, QWidget, QStatusBar, QApplication,
                               QLabel, QSizePolicy, QFrame, QMenu, QMessageBox,
                               QGroupBox, QToolButton, QInputDialog,QDialog, QDialogButtonBox, QTextEdit,
-                              QComboBox)
+                              QComboBox, QMenuBar)
 from PySide6.QtCore import Qt, QEvent, QTimer, QRegularExpression, QPropertyAnimation, QEasingCurve, QSize
 # QtGui에서 필요한 클래스들을 가져옵니다.
 from PySide6.QtGui import (QIcon, QPalette, QColor, QDragEnterEvent, QDropEvent,
@@ -348,11 +348,41 @@ class MainWindow(QMainWindow):
         """스타일시트 적용"""
         self.setStyleSheet(IOS_LIKE_QSS)
 
+
     def setup_menu_bar(self):
-        """메뉴바(도움말/정보) 구성 및 시그널 연결"""
-        help_menu = self.menuBar().addMenu("도움말")
+
+        if not hasattr(self, "status_bar") or self.status_bar is None:
+            self.status_bar = QStatusBar(self)
+            self.setStatusBar(self.status_bar)
+
+
+        # QToolButton 생성
+        self.help_button = QToolButton(self)
+        self.help_button.setText("도움말")
+        self.help_button.setPopupMode(QToolButton.InstantPopup)
+
+        # 드롭다운 메뉴 추가
+        help_menu = QMenu(self.help_button)
         about_action = help_menu.addAction("정보(About)")
         about_action.triggered.connect(self.show_about_dialog)
+        self.help_button.setMenu(help_menu)
+
+        # 오른쪽 끝에 고정 배치
+        self.status_bar.addPermanentWidget(self.help_button)
+
+        # 버튼 스타일
+        self.help_button.setStyleSheet("""
+            QToolButton {
+                background: transparent;
+                border: none;
+                padding: 0px 2px;          /* 상하 0px, 좌우 2px */
+                min-width: 0px;            /* 최소 너비 해제 */
+            }
+            QToolButton::menu-indicator { image: none; }
+            QToolButton:hover {
+                background: rgba(0,0,0,0.06);  /* 마우스 올렸을 때만 연한 배경 */
+            }
+        """)
 
     def setup_overlay(self):
         """드래그 앤 드롭 피드백을 위한 오버레이 설정"""
