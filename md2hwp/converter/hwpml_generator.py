@@ -31,7 +31,48 @@ class HWPMLGenerator:
         result = result.replace("<AUTHOR>작성자 없음</AUTHOR>", f"<AUTHOR>{author}</AUTHOR>")
         result = result.replace("<DATE>날짜 없음</DATE>", f"<DATE>{date}</DATE>")
 
+        # 문단 형식 조정 적용
+        result = self._apply_paragraph_format_adjustments(result)
+
         return result
+    
+    def _apply_paragraph_format_adjustments(self, hwpml_content):
+        """HWPML 내용에 문단 형식 조정 적용 (일반 문단만)"""
+        from bs4 import BeautifulSoup
+        
+        # 현재 문단 형식 설정 가져오기
+        format_settings = self.template_manager.get_paragraph_format_settings()
+        
+        if format_settings is None:
+            return hwpml_content  # 템플릿 기본값 사용
+        
+        # 일반 문단의 ParaShape ID 가져오기
+        normal_para_shape_id = self.template_manager.template_styles.get('p', {}).get('para_shape')
+        if not normal_para_shape_id:
+            return hwpml_content  # 일반 문단 ParaShape ID를 찾을 수 없음
+        
+        # XML 파싱
+        soup = BeautifulSoup(hwpml_content, 'xml')
+        
+        # 일반 문단의 ParaShape만 찾기
+        parashape = soup.find('PARASHAPE', {'Id': normal_para_shape_id})
+        if parashape:
+            # PARAMARGIN 태그 찾기
+            paramargin = parashape.find('PARAMARGIN')
+            if paramargin:
+                # Indent 설정
+                if 'indent' in format_settings:
+                    paramargin['Indent'] = str(format_settings['indent'])
+                
+                # LineSpacing 설정
+                if 'line_spacing' in format_settings:
+                    paramargin['LineSpacing'] = str(format_settings['line_spacing'])
+                
+                # LineSpacingType 설정
+                if 'line_spacing_type' in format_settings:
+                    paramargin['LineSpacingType'] = format_settings['line_spacing_type']
+        
+        return str(soup)
     
     def _convert_elements_to_hwpml(self, elements, is_first_h1):
         """마크다운 요소를 HWPML로 변환"""

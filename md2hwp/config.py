@@ -66,6 +66,16 @@ STYLE_MAPPING_ORDER = [
 # 기본 글머리표
 DEFAULT_BULLET_SYMBOL = "•"
 
+# 문단 형식 설정
+PARAGRAPH_FORMAT_SETTINGS = {
+    'default_format': 'normal',  # 'normal', 'template_default'
+    'normal_format': {
+        'indent': 0,           # 들여쓰기 (0 = 보통 형식)
+        'line_spacing': 160,   # 줄간격 (160% = 표준)
+        'line_spacing_type': 'Percent'
+    }
+}
+
 LICENSE_SERVER_URL = "https://license-gateway-7unzoje4.uc.gateway.dev/validate"
 LICENSE_FILE_PATH = "license.dat" 
 LICENSE_CHECK_INTERVAL_DAYS = 3  # 일반 라이선스 키는 3일마다 서버 검증 

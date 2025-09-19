@@ -8,7 +8,8 @@ import traceback
 from PySide6.QtWidgets import (QMainWindow, QTextEdit, QPushButton, QFileDialog, # <- QTextEdit 여기로 이동
                               QVBoxLayout, QHBoxLayout, QWidget, QStatusBar, QApplication,
                               QLabel, QSizePolicy, QFrame, QMenu, QMessageBox,
-                              QGroupBox, QToolButton, QInputDialog,QDialog, QDialogButtonBox, QTextEdit)
+                              QGroupBox, QToolButton, QInputDialog,QDialog, QDialogButtonBox, QTextEdit,
+                              QComboBox)
 from PySide6.QtCore import Qt, QEvent, QTimer, QRegularExpression, QPropertyAnimation, QEasingCurve, QSize
 # QtGui에서 필요한 클래스들을 가져옵니다.
 from PySide6.QtGui import (QIcon, QPalette, QColor, QDragEnterEvent, QDropEvent,
@@ -123,6 +124,9 @@ class MainWindow(QMainWindow):
 
         # --- 프로그램 시작 시 기본 템플릿 로드 ---
         self.load_default_template()
+        
+        # --- 초기 문단 형식 설정 ---
+        self.on_paragraph_format_changed(0)  # 기본값: 보통 형식
 
     def setup_ui(self):
         self.setWindowTitle(f"{APP_NAME} v1.0")
@@ -159,6 +163,13 @@ class MainWindow(QMainWindow):
         self.convert_button = QPushButton(" 변환하기")
         self.convert_button.setIcon(icon_convert)
         self.convert_button.setObjectName("ConvertButton")
+
+        # 문단 형식 선택 콤보박스 추가
+        self.paragraph_format_combo = QComboBox()
+        self.paragraph_format_combo.addItems(["보통 형식 (기본)", "템플릿 기본값"])
+        self.paragraph_format_combo.setCurrentIndex(0)  # 기본값: 보통 형식
+        self.paragraph_format_combo.currentIndexChanged.connect(self.on_paragraph_format_changed)
+        self.paragraph_format_combo.setToolTip("문단 형식을 선택하세요:\n• 보통 형식: 일반적인 공문서 형식 (들여쓰기 없음, 줄간격 160%)\n• 템플릿 기본값: 템플릿의 원본 설정 사용")
 
         self.template_label = QLabel("템플릿: 선택되지 않음")
         self.template_label.setObjectName("FilePathLabel")
@@ -205,6 +216,13 @@ class MainWindow(QMainWindow):
         top_button_layout.addStretch(1)
         top_button_layout.addWidget(self.convert_button)
         main_layout.addLayout(top_button_layout)
+
+        # 문단 형식 선택 레이아웃 추가
+        format_layout = QHBoxLayout()
+        format_layout.addWidget(QLabel("문단 형식:"))
+        format_layout.addWidget(self.paragraph_format_combo)
+        format_layout.addStretch(1)
+        main_layout.addLayout(format_layout)
 
         # --- 헤딩 변경 버튼 영역 추가 (텍스트 편집기 내부로 이동) ---
         # 헤딩 버튼 컨테이너 생성
@@ -1301,3 +1319,25 @@ class MainWindow(QMainWindow):
         else:
             # 실패 시 오류 메시지를 표시합니다.
             QMessageBox.critical(self, "오류", message)
+
+    def on_paragraph_format_changed(self, index):
+        """문단 형식 선택 변경 이벤트 핸들러"""
+        format_mapping = {
+            0: 'normal',           # 보통 형식 (기본)
+            1: 'template_default'  # 템플릿 기본값
+        }
+        
+        selected_format = format_mapping.get(index, 'normal')
+        
+        # TemplateManager에 문단 형식 설정 적용
+        if hasattr(self.converter, 'template_manager'):
+            self.converter.template_manager.set_paragraph_format(selected_format)
+            
+            # 상태 메시지 표시
+            format_names = {
+                'normal': '보통 형식',
+                'template_default': '템플릿 기본값'
+            }
+            
+            format_name = format_names.get(selected_format, '보통 형식')
+            self.status_handler.set_message(f"문단 형식이 '{format_name}'으로 설정되었습니다.", timeout=2000)

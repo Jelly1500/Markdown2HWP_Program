@@ -216,6 +216,43 @@ QWidget#SubHeadingButtonContainer,
 QWidget#SubFormatButtonContainer { /* 하위 포맷 컨테이너 추가 */
     background-color: transparent;
 }
+
+/* 콤보박스 스타일 */
+QComboBox {
+    background-color: #f0f2f5;
+    border: 1px solid #e0e0e0;
+    border-radius: 6px;
+    padding: 6px 12px;
+    font-size: 10pt;
+    color: #1d1d1f;
+    min-height: 20px;
+}
+QComboBox:hover {
+    border: 1px solid #b0b0b5;
+    background-color: #e2e5e8;
+}
+QComboBox:focus {
+    border: 1px solid #007aff;
+    background-color: #f8f9fa;
+}
+QComboBox::drop-down {
+    border: none;
+    width: 20px;
+}
+QComboBox::down-arrow {
+    image: none;
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+    border-top: 5px solid #6e6e73;
+    margin-right: 5px;
+}
+QComboBox QAbstractItemView {
+    background-color: #ffffff;
+    border: 1px solid #e0e0e0;
+    border-radius: 6px;
+    selection-background-color: #e2e5e8;
+    selection-color: #1d1d1f;
+}
 """
 
 # 다크 모드 스타일 (향후 확장용)

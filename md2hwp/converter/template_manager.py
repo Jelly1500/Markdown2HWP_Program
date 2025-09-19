@@ -3,7 +3,7 @@ HWPML 템플릿 관리 모듈
 """
 import re
 from bs4 import BeautifulSoup, NavigableString
-from ..config import STYLE_MAPPING_ORDER, DEFAULT_BULLET_SYMBOL
+from ..config import STYLE_MAPPING_ORDER, DEFAULT_BULLET_SYMBOL, PARAGRAPH_FORMAT_SETTINGS
 from .special_char import SpecialCharHandler
 import os
 
@@ -42,6 +42,10 @@ class TemplateManager:
         self.bullet_symbol = DEFAULT_BULLET_SYMBOL  # 기본 글머리표
         self.margin_para_shapes = {}
         self.special_char_handler = SpecialCharHandler()
+        
+        # 문단 형식 설정
+        self.paragraph_format_settings = PARAGRAPH_FORMAT_SETTINGS
+        self.current_paragraph_format = self.paragraph_format_settings['default_format']
         
         # 기본 템플릿 경로 설정 수정 (빌드된 exe 환경 고려)
         import sys
@@ -539,6 +543,46 @@ class TemplateManager:
         new_parashape['LineSpacingType'] = "Percent"  # 비율 단위 사용
         
         return new_parashape 
+
+    def set_paragraph_format(self, format_type):
+        """문단 형식 설정 (normal, template_default)"""
+        if format_type in ['normal', 'template_default']:
+            self.current_paragraph_format = format_type
+            print(f"문단 형식이 '{format_type}'으로 설정되었습니다.")
+        else:
+            print(f"지원하지 않는 문단 형식입니다: {format_type}")
+    
+    def get_paragraph_format_settings(self):
+        """현재 문단 형식 설정 반환"""
+        if self.current_paragraph_format == 'template_default':
+            return None  # 템플릿 기본값 사용
+        else:
+            return self.paragraph_format_settings[f"{self.current_paragraph_format}_format"]
+    
+    def adjust_parashape_format(self, parashape_soup, format_settings=None):
+        """ParaShape의 문단 형식을 조정"""
+        if format_settings is None:
+            format_settings = self.get_paragraph_format_settings()
+        
+        if format_settings is None:
+            return parashape_soup  # 템플릿 기본값 사용
+        
+        # PARAMARGIN 태그 찾기
+        paramargin = parashape_soup.find('PARAMARGIN')
+        if paramargin:
+            # Indent 설정
+            if 'indent' in format_settings:
+                paramargin['Indent'] = str(format_settings['indent'])
+            
+            # LineSpacing 설정
+            if 'line_spacing' in format_settings:
+                paramargin['LineSpacing'] = str(format_settings['line_spacing'])
+            
+            # LineSpacingType 설정
+            if 'line_spacing_type' in format_settings:
+                paramargin['LineSpacingType'] = format_settings['line_spacing_type']
+        
+        return parashape_soup
 
     def create_default_template(self, template_name):
         """기본 문서 설정이 적용된 새 템플릿 생성"""
