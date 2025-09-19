@@ -17,19 +17,61 @@ class MarkdownParser:
         """emoji 라이브러리를 사용하여 주어진 텍스트에서 이모티콘을 제거합니다."""
         return emoji.replace_emoji(text, replace='')
 
+    def _process_reference_links(self, md_text):
+        """Reference Link 형식([텍스트][번호])을 인라인 링크로 변환"""
+        # Reference Link 정의 패턴 찾기: [번호]: URL
+        reference_pattern = r'^\[(\d+)\]:\s*(.+)$'
+        references = {}
+        
+        lines = md_text.split('\n')
+        processed_lines = []
+        
+        # 1단계: Reference Link 정의 수집
+        for line in lines:
+            match = re.match(reference_pattern, line.strip())
+            if match:
+                ref_id = match.group(1)
+                url = match.group(2).strip()
+                references[ref_id] = url
+            else:
+                processed_lines.append(line)
+        
+        # 2단계: Reference Link 사용을 인라인 링크로 변환
+        result_lines = []
+        for line in processed_lines:
+            # [텍스트][번호] 패턴을 [텍스트](URL)로 변환
+            def replace_reference_link(match):
+                text = match.group(1)
+                ref_id = match.group(2)
+                if ref_id in references:
+                    return f'[{text}]({references[ref_id]})'
+                else:
+                    # Reference가 정의되지 않은 경우 원본 유지
+                    return match.group(0)
+            
+            # Reference Link 패턴: [텍스트][번호]
+            reference_link_pattern = r'\[([^\]]+)\]\[(\d+)\]'
+            processed_line = re.sub(reference_link_pattern, replace_reference_link, line)
+            result_lines.append(processed_line)
+        
+        return '\n'.join(result_lines)
+
     def parse(self, md_text):
         """마크다운을 HTML로 변환 후 구조화된 요소로 파싱"""
         # 1. 파싱 전 이모티콘 제거
         md_text_no_emojis = self._remove_emojis(md_text)
         
-        # 2. HTML로 변환
-        html = self.parser.html(md_text_no_emojis)
+        # 2. Reference Link 처리
+        processed_md_text = self._process_reference_links(md_text_no_emojis)
+        
+        # 3. HTML로 변환
+        html = self.parser.html(processed_md_text)
 
-        # 3. 디버깅을 위한 HTML 파일 저장
+        # 4. 디버깅을 위한 HTML 파일 저장
         with open("converted.html", "w", encoding="utf-8") as f:
             f.write(html)
 
-        # 4. HTML 파싱 및 요소 추출
+        # 5. HTML 파싱 및 요소 추출
         soup = BeautifulSoup(html, 'html.parser')
         return self._extract_markdown_elements(soup)
     def extract_metadata(self, md_text):
