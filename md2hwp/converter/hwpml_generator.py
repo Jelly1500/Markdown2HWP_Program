@@ -21,11 +21,47 @@ class HWPMLGenerator:
         hwpml_body, is_first_h1 = self._convert_elements_to_hwpml(md_elements, is_first_h1)
         # ----------------------------------
 
-        # 저장된 편집 용지(SECDEF) 설정 삽입
+        # 저장된 편집 용지(SECDEF) 설정과 본문 내용을 지능적으로 병합
         saved_defs = self.template_manager.sec_def_content
         if saved_defs and '<SECDEF' not in hwpml_body:
-            hwpml_body = saved_defs + hwpml_body
+            from bs4 import BeautifulSoup
+            
+            # 편집 용지 설정과 본문을 각각 파싱
+            secdef_soup = BeautifulSoup(saved_defs, 'xml')
+            body_soup = BeautifulSoup(f"<BODY_ROOT>{hwpml_body}</BODY_ROOT>", 'xml') # 파싱을 위한 임시 루트 태그
 
+            secdef_p = secdef_soup.find('P')
+            first_body_p = body_soup.find('P')
+
+            if secdef_p and first_body_p:
+                # 본문의 첫 P 태그에서 TEXT 태그 안의 모든 자식들을 추출
+                first_body_text = first_body_p.find('TEXT')
+                if first_body_text:
+                    children_to_move = list(first_body_text.children)
+                    
+                    # SECDEF P 태그의 TEXT 태그에 자식들을 옮김
+                    secdef_text = secdef_p.find('TEXT')
+                    if secdef_text:
+                        # 기존에 있던 빈 CHAR 태그는 제거
+                        empty_char = secdef_text.find('CHAR', string=' ')
+                        if empty_char:
+                            empty_char.decompose()
+
+                        for child in children_to_move:
+                            secdef_text.append(child.extract())
+                        
+                        # 내용이 옮겨진 첫 P 태그는 제거
+                        first_body_p.decompose()
+                        
+                        # 최종 hwpml_body 구성
+                        hwpml_body = str(secdef_p) + "".join(str(child) for child in body_soup.BODY_ROOT.children)
+                    else:
+                        hwpml_body = saved_defs + hwpml_body # Fallback
+                else:
+                    hwpml_body = saved_defs + hwpml_body # Fallback
+            else:
+                hwpml_body = saved_defs + hwpml_body # Fallback
+        
         result = replace_section_content(
             template_content,
             r'<BODY>.*?<SECTION Id="0">(.*?)</SECTION>.*?</BODY>',
