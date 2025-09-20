@@ -43,6 +43,9 @@ class TemplateManager:
         self.margin_para_shapes = {}
         self.special_char_handler = SpecialCharHandler()
         
+        # 편집 용지(SECDEF) 및 단 설정(COLDEF) 보관
+        self.sec_def_content = None
+
         # 문단 형식 설정
         self.paragraph_format_settings = PARAGRAPH_FORMAT_SETTINGS
         self.current_paragraph_format = self.paragraph_format_settings['default_format']
@@ -76,32 +79,63 @@ class TemplateManager:
                 print(f"템플릿 디렉토리 생성 실패: {e}")
     
     def load_template(self, template_path):
-        """HWPML 템플릿 파일 로드 및 서식 구조 추출"""
+        """
+        템플릿 로드 (BeautifulSoup 기반으로 수정)
+        - SECDEF와 실제 내용(표 등)이 한 P 태그에 섞인 경우를 처리하도록 개선
+        """
         try:
-            with open(template_path, 'r', encoding='utf-8') as file:
-                self.template_content = file.read()
+            with open(template_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            soup = BeautifulSoup(content, 'xml')
+
+            # BODY 태그 내에서 SECDEF를 포함한 P 태그 검색
+            body_tag = soup.find('BODY')
+            if not body_tag:
+                print("템플릿 로드 오류: BODY 태그를 찾을 수 없습니다.")
+                return False
+
+            p_tag_with_secdef = next((p for p in body_tag.find_all('P') if p.find('SECDEF')), None)
             
-            # 템플릿에서 서식 구조 추출
-            self._extract_template_styles()
+            if p_tag_with_secdef:
+                # 1. SECDEF와 COLDEF 태그를 원본 P 태그에서 '추출' (제거하고 반환받음)
+                secdef_tag = p_tag_with_secdef.find('SECDEF').extract()
+                coldef_tag = p_tag_with_secdef.find('COLDEF')
+                if coldef_tag:
+                    coldef_tag = coldef_tag.extract()
+
+                # 2. 추출한 태그들을 보관용 새 P 태그에 담기
+                clean_p_for_storage = soup.new_tag('P', **p_tag_with_secdef.attrs)
+                original_text_tag = p_tag_with_secdef.find('TEXT')
+                text_attrs = original_text_tag.attrs if original_text_tag else {}
+                new_text_tag = soup.new_tag('TEXT', **text_attrs)
+                
+                new_text_tag.append(secdef_tag)
+                if coldef_tag:
+                    new_text_tag.append(coldef_tag)
+                new_text_tag.append(soup.new_tag('CHAR', string=' '))
+                clean_p_for_storage.append(new_text_tag)
+                
+                self.sec_def_content = str(clean_p_for_storage)
+                print("편집 용지(SECDEF)를 포함한 문단 설정을 성공적으로 분리/정리하여 저장했습니다.")
+
+                # 3. 원본 P 태그에 더 이상 유의미한 내용이 없으면 완전히 제거
+                if not p_tag_with_secdef.get_text(strip=True) and not p_tag_with_secdef.find(['TABLE', 'PICTURE']):
+                    p_tag_with_secdef.decompose()
+                    print("내용이 없는 SECDEF 문단을 완전히 제거했습니다.")
             
-            # CharShape 추출 및 특별 서식 복제
-            self._extract_and_clone_charshapes()
-            
-            # 테이블 테두리 스타일 추가
-            border_result = self.add_table_borderfills()
-            if not border_result:
-                print("테이블 테두리 스타일 추가에 실패했습니다. 기본값을 사용합니다.")
-            
-            
+            # 이제 soup 객체는 SECDEF/COLDEF가 깔끔하게 분리된 상태
+            self._extract_template_styles(soup)
+            self._extract_and_clone_charshapes(soup)
+            self.add_table_borderfills(soup)
+            self.template_content = str(soup)
             
             return True
         except Exception as e:
             print(f"템플릿 로드 오류: {e}")
             return False
     
-    def _extract_template_styles(self):
+    def _extract_template_styles(self, soup):
         """템플릿에서 순서대로 서식 스타일 추출"""
-        soup = BeautifulSoup(self.template_content, 'xml')
         body_section = soup.find('BODY')
         if not body_section:
             raise ValueError("템플릿에 BODY 섹션이 없습니다")
@@ -234,10 +268,8 @@ class TemplateManager:
         match = re.search(r'<TEXT CharShape="(\d+)"', structure)
         return match.group(1) if match else "0"
     
-    def _extract_and_clone_charshapes(self):
+    def _extract_and_clone_charshapes(self, soup):
         """템플릿에서 CharShape을 추출하고 특별 서식이 적용된 복제본 생성 (단락/리스트 분리)"""
-        soup = BeautifulSoup(self.template_content, 'xml')
-
         docinfo = soup.find('MAPPINGTABLE')
         if not docinfo:
             raise ValueError("템플릿에 DOCINFO 섹션이 없습니다")
@@ -352,7 +384,7 @@ class TemplateManager:
         # 모든 하위 요소 복사 (BOLD, ITALIC, UNDERLINE 등 제외)
         for child in base_charshape.children:
             if isinstance(child, NavigableString):
-                new_charshape.append(child.copy())
+                new_charshape.append(child)
             else:
                 # 기존 서식 태그는 복사하지 않음 (새로 추가할 예정)
                 if child.name not in ['BOLD', 'ITALIC', 'UNDERLINE']:
@@ -361,7 +393,7 @@ class TemplateManager:
                         new_child[attr] = value
                     for grandchild in child.children:
                         if isinstance(grandchild, NavigableString):
-                            new_child.append(grandchild.copy())
+                            new_child.append(grandchild)
                         else:
                             new_grandchild = soup.new_tag(grandchild.name)
                             for attr, value in grandchild.attrs.items():
@@ -371,10 +403,8 @@ class TemplateManager:
         
         return new_charshape
     
-    def add_table_borderfills(self):
+    def add_table_borderfills(self, soup):
         """테이블용 BORDERFILL 요소를 추가하는 함수"""
-        soup = BeautifulSoup(self.template_content, 'xml')
-
         # BORDERFILLLIST 찾기
         borderfill_list = soup.find('BORDERFILLLIST')
         if not borderfill_list:
@@ -507,7 +537,6 @@ class TemplateManager:
         borderfill_list['Count'] = str(len(borderfill_list.find_all('BORDERFILL')))
 
         # 템플릿 내용 업데이트
-        self.template_content = str(soup)
         return True 
 
     
@@ -625,98 +654,79 @@ class TemplateManager:
     
     def create_template_from_source_advanced(self, source_path, template_name, p_tag_mappings):
         """
-        원본 문서 설정과 입력된 P 태그 매핑이 적용된 새 템플릿을 생성합니다.
-        (요구사항에 맞춰 수정된 함수)
+        [수정된 로직] 원본 문서(source_path)를 기반으로 BeautifulSoup DOM을 직접 조작하여 안전하게 템플릿을 생성합니다.
+        정규식과 문자열 재파싱을 최소화하여 구조적 안정성을 확보합니다.
         """
         try:
-            # 템플릿 이름에 .hml 확장자 추가
+            # 템플릿 이름 및 경로 설정
             if not template_name.endswith('.hml'):
                 template_name += '.hml'
-            
-            # 새 템플릿 파일 경로
             new_template_path = os.path.join(self.default_template_dir, template_name)
             
-            # 템플릿 저장 경로 로그 출력
-            print(f"고급 템플릿 생성 시작:")
+            print(f"고급 템플릿 생성 시작 (DOM 기반):")
             print(f"  - 템플릿 이름: {template_name}")
             print(f"  - 저장 경로: {new_template_path}")
-            print(f"  - 템플릿 디렉토리 존재: {os.path.exists(self.default_template_dir)}")
             print(f"  - 원본 파일: {source_path}")
-            print(f"  - P태그 매핑 개수: {len(p_tag_mappings)}")
             
-            # 기본 템플릿 파일이 존재하는지 확인
-            if not os.path.exists(self.default_template_file):
-                error_msg = f"기본 템플릿 파일을 찾을 수 없습니다.\n경로: {self.default_template_file}"
-                print(error_msg)
-                return False, error_msg
-            
-            # --- 기존 로직 (HEAD 및 PAGEDEF 태그 처리) - 그대로 유지 ---
+            # 1. 원본 HML 파일을 읽고 전체를 BeautifulSoup 객체로 파싱
             with open(source_path, 'r', encoding='utf-8') as f:
                 source_content = f.read()
-            
-            head_pattern = r'<HEAD.*?</HEAD>'
-            head_match = re.search(head_pattern, source_content, re.DOTALL)
-            if not head_match:
+            soup = BeautifulSoup(source_content, 'xml')
+
+            # 2. HEAD 수정: BorderFill 태그 추가 (기존 DOM 객체 직접 수정)
+            head_tag = soup.find('HEAD')
+            if not head_tag:
                 return False, "원본 파일에서 HEAD 태그를 찾을 수 없습니다."
-            head_content = head_match.group(0)
+            self._add_borderfills_to_head(head_tag)
 
-            # --- BorderFill 태그들을 head_content에 추가하는 로직 ---
-            head_content = self._add_borderfills_to_head(head_content)
-
-            pagedef_pattern = r'<PAGEDEF.*?</PAGEDEF>'
-            pagedef_match = re.search(pagedef_pattern, source_content, re.DOTALL)
-            if not pagedef_match:
-                return False, "원본 파일에서 PAGEDEF 태그를 찾을 수 없습니다."
-            pagedef_content = pagedef_match.group(0)
-
-            with open(self.default_template_file, 'r', encoding='utf-8') as f:
-                template_content = f.read()
+            # 3. 원본 DOM에서 SECDEF 포함 P 태그를 찾아 보관 (나중에 사용하기 위함)
+            secdef_para_tag = None
+            for p_tag in soup.find_all('P'):
+                if p_tag.find('SECDEF'):
+                    # CHAR 태그 안의 내용을 공백으로 정리
+                    for char_tag in p_tag.find_all('CHAR'):
+                        char_tag.string = ' '
+                    secdef_para_tag = p_tag.extract() # 원본 DOM에서 분리하여 보관
+                    break
             
-            template_content = re.sub(r'<HEAD.*?</HEAD>', head_content, template_content, flags=re.DOTALL)
-            template_content = re.sub(r'<PAGEDEF.*?</PAGEDEF>', pagedef_content, template_content, flags=re.DOTALL)
+            # 4. BODY 섹션 준비 (기존 내용 모두 삭제)
+            section_tag = soup.find('SECTION')
+            if not section_tag:
+                return False, "원본 파일에서 SECTION 태그를 찾을 수 없습니다."
+            section_tag.clear()
 
-            # --- ★★★ 신규 로직 (BODY 내용 생성 및 교체) ★★★ ---
+            # 5. 사용자가 선택한 문단에 SECDEF가 있는지 확인
+            has_secdef_in_selection = any('<SECDEF' in p_str for p_str in p_tag_mappings.values())
 
-            # 1. 플레이스홀더 P 태그를 스타일 매핑 개수만큼 생성합니다.
+            # 6. 필요 시, 보관해 둔 SECDEF P 태그를 SECTION의 맨 앞에 삽입
+            if not has_secdef_in_selection:
+                if secdef_para_tag:
+                    print("템플릿에 SECDEF 태그가 누락되어 원본 문서에서 가져옵니다.")
+                    section_tag.insert(0, secdef_para_tag)
+                    print("편집 용지(SECDEF/COLDEF) 설정을 템플릿 맨 앞에 추가했습니다.")
+                else:
+                    print("경고: 원본 문서에서도 용지 설정(SECDEF/COLDEF)을 찾지 못했습니다.")
+
+            # 7. 사용자가 매핑한 P 태그들을 SECTION에 순서대로 추가
             placeholder_p_tag = '<P ParaShape="0" Style="0"><TEXT CharShape="0"><CHAR>###</CHAR></TEXT></P>'
-            total_slots = len(self.style_mapping_order)
-            p_tag_list = [placeholder_p_tag] * total_slots
-            
-            # 2. 입력받은 p_tag_mappings에 따라 플레이스홀더를 실제 P 태그로 교체합니다.
-            for line_num_str, new_p_tag in p_tag_mappings.items():
+            p_tag_strings = [placeholder_p_tag] * len(self.style_mapping_order)
+            for line_num_str, p_tag_str in p_tag_mappings.items():
                 try:
-                    # 1 기반 인덱스를 0 기반으로 변환
                     index = int(line_num_str) - 1
-                    if 0 <= index < len(p_tag_list):
-                        p_tag_list[index] = new_p_tag
-                        print(f"  - P태그 매핑: {line_num_str} -> 인덱스 {index}")
-                    else:
-                        print(f"경고: 유효하지 않은 줄 번호 '{line_num_str}'는 무시됩니다.")
+                    if 0 <= index < len(p_tag_strings):
+                        p_tag_strings[index] = p_tag_str
                 except (ValueError, TypeError):
-                    print(f"경고: 잘못된 키 값 '{line_num_str}'는 무시됩니다.")
-
-            # 3. 수정된 P 태그 리스트를 하나의 문자열로 결합합니다.
-            final_p_tags_string = "\n".join(p_tag_list)
-
-            # 4. 템플릿에서 기존 BODY 블록을 찾아 새로 생성한 내용으로 교체합니다.
-            #    이때, BODY와 SECTION의 여는 태그는 원본 템플릿의 것을 유지하여 속성을 보존합니다.
-            body_open_match = re.search(r'(<BODY.*?>)', template_content, re.DOTALL)
-            section_open_match = re.search(r'(<SECTION.*?>)', template_content, re.DOTALL)
+                    continue
             
-            body_open_tag = body_open_match.group(1) if body_open_match else "<BODY>"
-            section_open_tag = section_open_match.group(1) if section_open_match else '<SECTION ID="0">'
-            
-            # 새로운 BODY 블록 구성
-            new_body_block = f"{body_open_tag}\n{section_open_tag}\n{final_p_tags_string}\n</SECTION>\n</BODY>"
-            
-            # 기존 BODY 블록 전체를 새로운 블록으로 교체
-            template_content = re.sub(r'<BODY.*?</BODY>', new_body_block, template_content, flags=re.DOTALL)
+            for p_tag_str in p_tag_strings:
+                p_soup = BeautifulSoup(p_tag_str, 'xml')
+                p_tag_to_append = p_soup.find('P')
+                if p_tag_to_append:
+                    section_tag.append(p_tag_to_append)
 
-            # -------------------- 신규 로직 끝 --------------------
-
-            # 수정된 템플릿을 새 파일로 저장
+            # 8. 최종 수정된 soup 객체를 파일에 저장
             with open(new_template_path, 'w', encoding='utf-8') as f:
-                f.write(template_content)
+                f.write(str(soup))
             
             print(f"템플릿 파일 저장 성공: {new_template_path}")
             return True, f"새 템플릿 '{template_name}' 생성 완료"
@@ -726,15 +736,13 @@ class TemplateManager:
             print(error_msg)
             return False, error_msg
 
-    def _add_borderfills_to_head(self, head_content):
-        """head_content에 새로운 BorderFill 태그들을 추가합니다. (BeautifulSoup 사용)"""
+    def _add_borderfills_to_head(self, head_tag):
+        """head_tag 객체에 테이블용 BORDERFILL 요소들을 직접 추가합니다."""
         try:
-            soup = BeautifulSoup(head_content, 'xml')
-            borderfill_list = soup.find('BORDERFILLLIST')
-
+            borderfill_list = head_tag.find('BORDERFILLLIST')
             if not borderfill_list:
                 print("경고: BORDERFILLLIST를 찾을 수 없습니다.")
-                return head_content
+                return
 
             existing_ids = [int(bf.get('Id', '0')) for bf in borderfill_list.find_all('BORDERFILL')]
             next_id = max(existing_ids) + 1 if existing_ids else 1
@@ -756,7 +764,8 @@ class TemplateManager:
             
             for bf_xml in new_borderfills_xml:
                 bf_soup = BeautifulSoup(bf_xml, 'xml')
-                borderfill_list.append(bf_soup.find('BORDERFILL'))
+                if bf_soup.BORDERFILL:
+                    borderfill_list.append(bf_soup.BORDERFILL)
 
             borderfill_list['Count'] = str(len(borderfill_list.find_all('BORDERFILL')))
 
@@ -778,12 +787,5 @@ class TemplateManager:
             print(f"BorderFill 태그 {len(new_borderfills_xml)}개 추가 완료 (ID: {next_id} ~ {next_id + len(new_borderfills_xml) - 1})")
             print(f"테이블 테두리 BorderFill ID 매핑 업데이트 완료")
             
-            # BeautifulSoup 객체를 문자열로 변환하여 반환하되, <?xml> 선언이 붙지 않도록 HEAD 태그 내용만 추출
-            head_tag = soup.find('HEAD')
-            if head_tag:
-                return str(head_tag)
-            return head_content
-
         except Exception as e:
             print(f"BorderFill 추가 중 오류 발생: {e}")
-            return head_content

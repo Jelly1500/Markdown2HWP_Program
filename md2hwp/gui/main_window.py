@@ -118,6 +118,11 @@ class MainWindow(QMainWindow):
         self.selected_format_type = None # 현재 선택된 포맷 타입 ('bold', 'italic', 'list')
         self.active_delete_button = None # 현재 활성화된 포맷 삭제 버튼
 
+        # 아이콘 경로 딕셔너리 초기화
+        self.icon_paths = {
+            'default_template': ":/qt-project.org/styles/commonstyle/images/hml.png" 
+        }
+
         # UI 설정 및 스타일 적용
         self.setup_ui()
         self.apply_styles()

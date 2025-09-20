@@ -21,6 +21,11 @@ class HWPMLGenerator:
         hwpml_body, is_first_h1 = self._convert_elements_to_hwpml(md_elements, is_first_h1)
         # ----------------------------------
 
+        # 저장된 편집 용지(SECDEF) 설정 삽입
+        saved_defs = self.template_manager.sec_def_content
+        if saved_defs and '<SECDEF' not in hwpml_body:
+            hwpml_body = saved_defs + hwpml_body
+
         result = replace_section_content(
             template_content,
             r'<BODY>.*?<SECTION Id="0">(.*?)</SECTION>.*?</BODY>',
