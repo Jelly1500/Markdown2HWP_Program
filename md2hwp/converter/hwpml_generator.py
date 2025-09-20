@@ -37,8 +37,8 @@ class HWPMLGenerator:
         return result
     
     def _apply_paragraph_format_adjustments(self, hwpml_content):
-        """HWPML 내용에 문단 형식 조정 적용 (일반 문단만)"""
-        from bs4 import BeautifulSoup
+        """HWPML 내용에 문단 형식 조정 적용 (최상위 문단만)"""
+        from bs4 import BeautifulSoup, Tag
         
         # 현재 문단 형식 설정 가져오기
         format_settings = self.template_manager.get_paragraph_format_settings()
@@ -46,31 +46,34 @@ class HWPMLGenerator:
         if format_settings is None:
             return hwpml_content  # 템플릿 기본값 사용
         
-        # 일반 문단의 ParaShape ID 가져오기
-        normal_para_shape_id = self.template_manager.template_styles.get('p', {}).get('para_shape')
-        if not normal_para_shape_id:
-            return hwpml_content  # 일반 문단 ParaShape ID를 찾을 수 없음
-        
         # XML 파싱
         soup = BeautifulSoup(hwpml_content, 'xml')
         
-        # 일반 문단의 ParaShape만 찾기
-        parashape = soup.find('PARASHAPE', {'Id': normal_para_shape_id})
-        if parashape:
-            # PARAMARGIN 태그 찾기
-            paramargin = parashape.find('PARAMARGIN')
-            if paramargin:
-                # Indent 설정
-                if 'indent' in format_settings:
-                    paramargin['Indent'] = str(format_settings['indent'])
-                
-                # LineSpacing 설정
-                if 'line_spacing' in format_settings:
-                    paramargin['LineSpacing'] = str(format_settings['line_spacing'])
-                
-                # LineSpacingType 설정
-                if 'line_spacing_type' in format_settings:
-                    paramargin['LineSpacingType'] = format_settings['line_spacing_type']
+        # 최상위 P 태그들이 사용하는 ParaShape ID 수집
+        section = soup.find('SECTION')
+        if not section:
+            return hwpml_content
+
+        top_level_para_shape_ids = set()
+        for child in section.children:
+            # P 태그이면서 Tag 인스턴스인 경우에만 처리
+            if isinstance(child, Tag) and child.name == 'P':
+                para_shape_id = child.get('ParaShape')
+                if para_shape_id:
+                    top_level_para_shape_ids.add(para_shape_id)
+
+        # 수집된 ID에 해당하는 모든 ParaShape 수정
+        for para_shape_id in top_level_para_shape_ids:
+            parashape = soup.find('PARASHAPE', {'Id': para_shape_id})
+            if parashape:
+                paramargin = parashape.find('PARAMARGIN')
+                if paramargin:
+                    if 'indent' in format_settings:
+                        paramargin['Indent'] = str(format_settings['indent'])
+                    if 'line_spacing' in format_settings:
+                        paramargin['LineSpacing'] = str(format_settings['line_spacing'])
+                    if 'line_spacing_type' in format_settings:
+                        paramargin['LineSpacingType'] = format_settings['line_spacing_type']
         
         return str(soup)
     
