@@ -7,29 +7,26 @@ jobs:
   build:
     runs-on: windows-latest
 
+    # 항상 사용 가능한 컨텍스트(github.workspace)를 이용해 캐시 디렉터리 고정
     env:
-      # Nuitka 캐시 위치를 고정(런마다 일관된 경로)하여 Actions 캐시에 적재
-      NUITKA_CACHE_DIR: ${{ runner.temp }}\nuitka-cache
+      NUITKA_CACHE_DIR: ${{ github.workspace }}\_nuitka_cache
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # GitHub 호스트 런너에 캐시된 Python을 설치하는 편이 uv로 설치하는 것보다 빠른 경우가 많습니다.
       - name: Set up Python 3.12.10
         uses: actions/setup-python@v5
         with:
           python-version: 3.12.10
-          cache: 'pip'   # pip 캐시는 uv와 별개지만, 혹시 pip를 쓰는 보조 단계가 있을 때 도움
+          cache: 'pip'
 
-      # uv 설치 및 uv 내부 캐시 활성화
       - name: Set up uv
         uses: astral-sh/setup-uv@v6
         with:
-          enable-cache: true  # uv의 패키지 캐시를 GitHub Cache로 보존
-          # version: "latest"  # 필요 시 uv 버전 고정 가능
+          enable-cache: true
 
-      # Nuitka 캐시(컴파일 결과/다운로드 등)를 보존
+      # Nuitka 캐시(컴파일 산출물/다운로드 등)를 보존
       - name: Cache Nuitka
         uses: actions/cache@v4
         with:
@@ -39,13 +36,11 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-nuitka-
 
-      # 의존성 설치: uv로 매우 빠르게 설치
       - name: Install dependencies (uv)
         shell: pwsh
         run: |
           uv pip install --system -r requirements.txt
 
-      # Nuitka 빌드
       - name: Build with Nuitka
         shell: pwsh
         run: |
