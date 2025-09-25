@@ -7,9 +7,9 @@ jobs:
   build:
     runs-on: windows-latest
 
-    # 항상 사용 가능한 컨텍스트(github.workspace)를 이용해 캐시 디렉터리 고정
     env:
       NUITKA_CACHE_DIR: ${{ github.workspace }}\_nuitka_cache
+      UV_LINK_MODE: copy
 
     steps:
       - name: Checkout repository
@@ -26,7 +26,6 @@ jobs:
         with:
           enable-cache: true
 
-      # Nuitka 캐시(컴파일 산출물/다운로드 등)를 보존
       - name: Cache Nuitka
         uses: actions/cache@v4
         with:
@@ -41,7 +40,7 @@ jobs:
         run: |
           uv pip install --system -r requirements.txt
 
-            - name: Build with Nuitka
+      - name: Build with Nuitka
         shell: pwsh
         run: |
           # 안전한 병렬 값 설정 (환경변수 없으면 2)
@@ -53,7 +52,7 @@ jobs:
             --assume-yes-for-downloads `
             --windows-console-mode=disable `
             --clang `
-            --jobs=$jobs `            # <= equals 형태로 전달
+            --jobs=$jobs `
             --lto=no `
             --nofollow-import-to=PyQt5 `
             --include-package=mistune.plugins `
@@ -63,7 +62,6 @@ jobs:
             --output-dir=build_output `
             --output-filename="마크다운 HWP 변환기" `
             run.py
-
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
