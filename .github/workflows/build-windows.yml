@@ -41,16 +41,19 @@ jobs:
         run: |
           uv pip install --system -r requirements.txt
 
-      - name: Build with Nuitka
+            - name: Build with Nuitka
         shell: pwsh
         run: |
+          # 안전한 병렬 값 설정 (환경변수 없으면 2)
+          $jobs = if ($env:NUMBER_OF_PROCESSORS) { [int]$env:NUMBER_OF_PROCESSORS } else { 2 }
+
           python -m nuitka `
             --standalone `
             --plugin-enable=pyside6 `
             --assume-yes-for-downloads `
             --windows-console-mode=disable `
             --clang `
-            --jobs $env:NUMBER_OF_PROCESSORS `
+            --jobs=$jobs `            # <= equals 형태로 전달
             --lto=no `
             --nofollow-import-to=PyQt5 `
             --include-package=mistune.plugins `
@@ -60,6 +63,7 @@ jobs:
             --output-dir=build_output `
             --output-filename="마크다운 HWP 변환기" `
             run.py
+
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
