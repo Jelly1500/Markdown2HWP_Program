@@ -1,54 +1,62 @@
-# GitHub Actions 워크플로우의 이름
 name: Build Windows Executable (Optimized)
 
-# 이 워크플로우가 언제 실행될지를 정의합니다.
 on:
-  # 'main' 브랜치에 push 이벤트가 발생했을 때 실행됩니다.
-
-  # 수동으로 Actions 탭에서 직접 실행할 수도 있게 합니다.
   workflow_dispatch:
 
 jobs:
   build:
-    # 작업이 실행될 가상 환경을 지정합니다.
     runs-on: windows-latest
 
+    env:
+      # Nuitka 캐시 위치를 고정(런마다 일관된 경로)하여 Actions 캐시에 적재
+      NUITKA_CACHE_DIR: ${{ runner.temp }}\nuitka-cache
+
     steps:
-      # 1. 저장소의 코드를 가상 환경으로 가져옵니다.
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2. Python 3.9 버전을 설치하고 pip 캐시를 활성화합니다.
-      # PySide6와 같은 복잡한 GUI 라이브러리는 안정적인 버전의 Python과 호환성이 더 좋습니다.
+      # GitHub 호스트 런너에 캐시된 Python을 설치하는 편이 uv로 설치하는 것보다 빠른 경우가 많습니다.
       - name: Set up Python 3.12.10
         uses: actions/setup-python@v5
         with:
           python-version: 3.12.10
-          cache: 'pip'
+          cache: 'pip'   # pip 캐시는 uv와 별개지만, 혹시 pip를 쓰는 보조 단계가 있을 때 도움
 
-      # 3. Nuitka의 C 컴파일 캐시를 설정하여 빌드 속도를 향상시킵니다.
+      # uv 설치 및 uv 내부 캐시 활성화
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true  # uv의 패키지 캐시를 GitHub Cache로 보존
+          # version: "latest"  # 필요 시 uv 버전 고정 가능
+
+      # Nuitka 캐시(컴파일 결과/다운로드 등)를 보존
       - name: Cache Nuitka
         uses: actions/cache@v4
         with:
-          path: '%APPDATA%\Nuitka'
-          key: ${{ runner.os }}-nuitka-cache-${{ hashFiles('**/requirements.txt') }}
+          path: |
+            ${{ env.NUITKA_CACHE_DIR }}
+          key: ${{ runner.os }}-nuitka-${{ hashFiles('**/requirements.txt', '**/*.py') }}
           restore-keys: |
-            ${{ runner.os }}-nuitka-cache-
+            ${{ runner.os }}-nuitka-
 
-      # 4. Python 의존성 패키지를 설치합니다.
-      # requirements.txt에 Nuitka가 이미 포함되어 있으므로 별도 설치는 필요 없습니다.
-      - name: Install dependencies
+      # 의존성 설치: uv로 매우 빠르게 설치
+      - name: Install dependencies (uv)
+        shell: pwsh
         run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          uv pip install --system -r requirements.txt
 
-      # 5. Nuitka로 Python 스크립트를 빌드합니다.
+      # Nuitka 빌드
       - name: Build with Nuitka
+        shell: pwsh
         run: |
-          python -m nuitka --standalone --plugin-enable=pyside6 `
+          python -m nuitka `
+            --standalone `
+            --plugin-enable=pyside6 `
             --assume-yes-for-downloads `
             --windows-console-mode=disable `
-            -j $env:NUMBER_OF_PROCESSORS `
+            --clang `
+            --jobs $env:NUMBER_OF_PROCESSORS `
+            --lto=no `
             --nofollow-import-to=PyQt5 `
             --include-package=mistune.plugins `
             --include-package-data=emoji `
@@ -58,7 +66,6 @@ jobs:
             --output-filename="마크다운 HWP 변환기" `
             run.py
 
-      # 6. 빌드 결과물을 업로드합니다.
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
