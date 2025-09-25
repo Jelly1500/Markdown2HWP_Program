@@ -10,6 +10,7 @@ jobs:
     env:
       NUITKA_CACHE_DIR: ${{ github.workspace }}\_nuitka_cache
       UV_LINK_MODE: copy
+      UV_VERSION: "0.8.x"   # uv 버전 고정 (필요 시 "0.8.22"처럼 정확히 핀)
 
     steps:
       - name: Checkout repository
@@ -21,10 +22,26 @@ jobs:
           python-version: 3.12.10
           cache: 'pip'
 
-      - name: Set up uv
+      # 우선 setup-uv 사용 (버전 고정). 네트워크 이슈 시 실패 허용.
+      - name: Set up uv (pinned)
+        id: setup_uv
         uses: astral-sh/setup-uv@v6
         with:
+          version: ${{ env.UV_VERSION }}
           enable-cache: true
+        continue-on-error: true
+
+      # setup-uv가 실패했으면 공식 설치 스크립트로 폴백 (동일 버전)
+      - name: Fallback install uv (PowerShell script)
+        if: steps.setup_uv.outcome == 'failure'
+        shell: pwsh
+        run: |
+          $ver = "${env:UV_VERSION}"
+          if ($ver -match '^\d') {
+            powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/$ver/install.ps1 | iex"
+          } else {
+            powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+          }
 
       - name: Cache Nuitka
         uses: actions/cache@v4
@@ -38,14 +55,13 @@ jobs:
       - name: Install dependencies (uv)
         shell: pwsh
         run: |
-          uv pip install --system -r requirements.txt
+          uv --version
+          uv pip install --system -r requirements.txt --link-mode=copy
 
       - name: Build with Nuitka
         shell: pwsh
         run: |
-          # 안전한 병렬 값 설정 (환경변수 없으면 2)
           $jobs = if ($env:NUMBER_OF_PROCESSORS) { [int]$env:NUMBER_OF_PROCESSORS } else { 2 }
-
           python -m nuitka `
             --standalone `
             --plugin-enable=pyside6 `
