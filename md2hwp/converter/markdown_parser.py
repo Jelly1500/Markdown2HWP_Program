@@ -251,6 +251,7 @@ class MarkdownParser:
             except (ValueError, TypeError):
                 start_value = 1
         
+        current_value = start_value
         for li in list_tag.find_all('li', recursive=False):
             item_fragments = []
             nested_lists = []
@@ -337,7 +338,7 @@ class MarkdownParser:
                     'fragments': item_fragments,
                     'is_ordered': is_ordered,
                     'level': 0,
-                    'start_value': start_value if is_ordered else None
+                    'start_value': current_value if is_ordered else None
                 }
                 
                 if nested_lists:
@@ -347,6 +348,8 @@ class MarkdownParser:
                         item_info['nested_items'].extend(nested_items)
                 
                 items.append(item_info)
+                if is_ordered:
+                    current_value += 1
         
         return items
     
@@ -363,6 +366,7 @@ class MarkdownParser:
             except (ValueError, TypeError):
                 start_value = 1
         
+        current_value = start_value
         for li in list_tag.find_all('li', recursive=False):
             item_fragments = []
             nested_lists = []
@@ -395,7 +399,7 @@ class MarkdownParser:
                 'fragments': item_fragments,
                 'is_ordered': is_ordered,
                 'level': level,
-                'start_value': start_value if is_ordered else None
+                'start_value': current_value if is_ordered else None
             }
             
             if nested_lists:
@@ -405,6 +409,8 @@ class MarkdownParser:
                     item_info['nested_items'].extend(nested_items)
             
             items.append(item_info)
+            if is_ordered:
+                current_value += 1
         
         return items
     

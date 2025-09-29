@@ -281,7 +281,7 @@ class TemplateManager:
                 continue
 
             structure = str(p)
-            bullet_char_shape, text_char_shape, bullet_symbol = self._extract_list_char_shapes(p)
+            bullet_char_shape, text_char_shape, bullet_symbol, prefix_text = self._extract_list_char_shapes(p)
             if text_char_shape is None:
                 continue
             para_shape = p.get('ParaShape', '0')
@@ -294,7 +294,8 @@ class TemplateManager:
                 'structure': structure,
                 'para_shape': para_shape,
                 'bullet_char_shape': bullet_char_shape or self._extract_char_shape(structure),
-                'text_char_shape': text_char_shape or self._extract_char_shape(structure)
+                'text_char_shape': text_char_shape or self._extract_char_shape(structure),
+                'prefix_text': prefix_text or ''
             }
             self.list_level_styles[level] = entry
 
@@ -307,7 +308,8 @@ class TemplateManager:
                 'text_char_shape': entry['text_char_shape'],
                 'has_table': '<TABLE' in structure,
                 'has_field': '<FIELDBEGIN' in structure,
-                'has_special_char_numbering': False
+                'has_special_char_numbering': False,
+                'prefix_text': prefix_text or ''
             }
 
             level += 1
@@ -317,27 +319,39 @@ class TemplateManager:
         bullet_char_shape = None
         text_char_shape = None
         bullet_symbol = None
+        prefix_parts = []
+        bullet_found = False
 
         for text_tag in p_tag.find_all('TEXT'):
             char_shape = text_tag.get('CharShape')
             for char_node in text_tag.find_all('CHAR'):
-                content = char_node.text
+                content = char_node.text or ''
+                if not bullet_found:
+                    prefix_parts.append(content)
+
                 stripped = content.strip()
                 if not stripped:
                     continue
+
                 first_char = stripped[0]
-                if bullet_symbol is None and not first_char.isalnum():
+                if not bullet_found and not first_char.isalnum():
                     bullet_symbol = first_char
                     bullet_char_shape = char_shape
+                    bullet_found = True
                 else:
                     if text_char_shape is None:
                         text_char_shape = char_shape
-                if bullet_symbol and text_char_shape:
+                    if prefix_parts and first_char in prefix_parts[-1]:
+                        prefix_parts[-1] = prefix_parts[-1][:prefix_parts[-1].find(first_char)]
+                    bullet_found = True
                     break
-            if bullet_symbol and text_char_shape:
+            if bullet_found and text_char_shape is not None:
                 break
 
-        return bullet_char_shape, text_char_shape, bullet_symbol
+        prefix_text = ''.join(prefix_parts)
+        prefix_text = prefix_text.rstrip('\r').rstrip('\n')
+        return bullet_char_shape, text_char_shape, bullet_symbol, prefix_text
+
 
     def _extract_balanced_p_tags(self, content):
         """균형 잡힌 P 태그 쌍을 순서대로 추출"""

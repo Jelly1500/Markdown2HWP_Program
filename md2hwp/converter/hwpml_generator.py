@@ -413,11 +413,12 @@ class HWPMLGenerator:
         is_ordered = item.get('is_ordered', False)
         
         # 현재 레벨에 맞는 스타일 결정
+        max_defined_level = None
         style_for_level = None
         if getattr(self.template_manager, 'list_level_styles', None):
             # 가장 가까운 하위 레벨 스타일로 폴백
-            max_defined = max(self.template_manager.list_level_styles.keys()) if self.template_manager.list_level_styles else 0
-            use_level = level if level in self.template_manager.list_level_styles else min(level, max_defined)
+            max_defined_level = max(self.template_manager.list_level_styles.keys()) if self.template_manager.list_level_styles else 0
+            use_level = level if level in self.template_manager.list_level_styles else min(level, max_defined_level)
             style_for_level = self.template_manager.list_level_styles.get(use_level)
 
         if not style_for_level:
@@ -445,27 +446,43 @@ class HWPMLGenerator:
             em_shape = fmt_for_level.get("em", text_char_shape)
 
         # 글머리 기호 설정
+        number_prefix = None
         if is_ordered:
-            # start_value가 있으면 해당 값을 사용
             start_value = item.get('start_value')
             if start_value is not None:
-                prefix = f"{start_value}. "
+                number_prefix = f"{start_value}. "
             elif is_top_level:
-                prefix = f"{top_level_counter}. "
+                number_prefix = f"{top_level_counter}. "
             else:
                 if level not in counter:
                     counter[level] = 1
-                prefix = f"{counter[level]}. "
+                number_prefix = f"{counter[level]}. "
                 counter[level] += 1
         else:
-            prefix = f"{bullet_symbol} "
+            number_prefix = f"{bullet_symbol} "
 
         indent = "  " * level
         hwpml += f'<P {p_attributes}>'
 
-        # 글머리 기호에는 템플릿의 bullet_char_shape 사용
-        bullet_text = f'{indent}{prefix}'
-        bullet_text = bullet_text.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+        prefix_template = style_for_level.get('prefix_text') if style_for_level else None
+        bullet_text = None
+        if prefix_template:
+            bullet_text = prefix_template
+            template_symbol = self.template_manager.bullet_symbol_levels.get(level, self.template_manager.bullet_symbol)
+            if is_ordered:
+                replacement = number_prefix or ''
+                if template_symbol and template_symbol in bullet_text:
+                    bullet_text = self._merge_number_with_template(bullet_text, template_symbol, replacement)
+                else:
+                    bullet_text = f"{bullet_text}{replacement}"
+        else:
+            bullet_text = f"{indent}{number_prefix}" if number_prefix else indent
+
+        if prefix_template and max_defined_level is not None and level > max_defined_level:
+            extra_spaces = ' ' * (2 * (level - max_defined_level))
+            bullet_text = f"{extra_spaces}{bullet_text}"
+
+        bullet_text = (bullet_text or '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
         hwpml += f'<TEXT CharShape="{bullet_char_shape}"><CHAR>{bullet_text}</CHAR></TEXT>'
 
         # 텍스트 내용에는 리스트의 text_char_shape 사용
@@ -489,7 +506,7 @@ class HWPMLGenerator:
                 continue
 
             # 'br' 타입 외에는 content가 있다고 가정
-            content = fragment.get('content', '').replace('&', '&amp;')
+            content = fragment.get('content', '').rstrip('\n').replace('&', '&amp;')
 
             if fragment_type == 'text':
                 new_shape = text_char_shape
@@ -539,7 +556,25 @@ class HWPMLGenerator:
                 hwpml += self._process_list_item(nested_item, template, char_shape, top_level_counter, is_top_level=False, counter=nested_counter)
 
         return hwpml
-    
+
+    def _merge_number_with_template(self, template_prefix, template_symbol, replacement):
+        """Merge ordered list numbering into a template-defined bullet prefix while preserving spacing."""
+        if not template_prefix:
+            return replacement
+
+        replacement_clean = (replacement or '').rstrip()
+
+        if template_symbol and template_symbol in template_prefix:
+            idx_symbol = template_prefix.find(template_symbol)
+            leading = template_prefix[:idx_symbol]
+            trailing = template_prefix[idx_symbol + len(template_symbol):]
+            combined = f"{leading}{replacement_clean}{trailing}"
+            if not trailing.startswith(' ') and not (replacement or '').endswith(' '):
+                combined = f"{combined} "
+            return combined
+
+        return f"{template_prefix}{replacement}"
+
     def _convert_code_block(self, element):
         """코드 블록을 HWPML 단락으로 변환. 공백과 줄바꿈을 보존."""
         # 'p' 스타일을 코드 블록의 기반으로 사용. 향후 'code' 전용 스타일을 만들 수 있음.
