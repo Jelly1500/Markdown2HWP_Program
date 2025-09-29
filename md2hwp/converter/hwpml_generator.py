@@ -468,7 +468,9 @@ class HWPMLGenerator:
         hwpml += f'<P {p_attributes}>'
 
         # 글머리 기호에는 템플릿의 bullet_char_shape 사용
-        hwpml += f'<TEXT CharShape="{bullet_char_shape}"><CHAR>{indent}{prefix}</CHAR></TEXT>'
+        bullet_text = f'{indent}{prefix}'
+        bullet_text = bullet_text.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+        hwpml += f'<TEXT CharShape="{bullet_char_shape}"><CHAR>{bullet_text}</CHAR></TEXT>'
 
         # 텍스트 내용에는 리스트의 text_char_shape 사용
         # text_char_shape already computed above

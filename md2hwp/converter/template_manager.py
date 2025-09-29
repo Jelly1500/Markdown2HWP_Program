@@ -209,16 +209,25 @@ class TemplateManager:
                         self.bullet_symbol_levels.setdefault(level_index, DEFAULT_BULLET_SYMBOL)
     
     def _extract_bullet_symbol(self, structure):
-        """순서 없는 리스트 구조에서 글머리표 특수기호 추출"""
-        char_pattern = re.compile(r'<CHAR>(.*?)</CHAR>')
+        """리스트 스타일 템플릿에서 불릿 기호 추출"""
+        char_pattern = re.compile(r'<CHAR>(.*?)</CHAR>', re.DOTALL)
         match = char_pattern.search(structure)
-        
-        if match:
-            content = match.group(1).strip()
-            if content and not content[0].isalnum():
-                bullet_parts = re.match(r'([^\w\s]+)(\s*)(.*)', content)
-                if bullet_parts:
-                    return bullet_parts.group(1)
+
+        if not match:
+            return None
+
+        content = match.group(1)
+        # remove inline tags such as <TAB/> before extracting the symbol
+        content = re.sub(r'<[^>]+>', '', content)
+        content = content.strip()
+
+        if not content:
+            return None
+
+        match_symbol = re.match(r'[^\w\s]+', content)
+        if match_symbol:
+            return match_symbol.group(0)
+
         return None
     
     def _extract_balanced_p_tags(self, content):
