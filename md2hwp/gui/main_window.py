@@ -4,6 +4,7 @@ import io
 import sys
 import re
 import traceback
+import webbrowser
 # QtWidgets에서 필요한 클래스들을 가져옵니다.
 from PySide6.QtWidgets import (QMainWindow, QTextEdit, QPushButton, QFileDialog, # <- QTextEdit 여기로 이동
                               QVBoxLayout, QHBoxLayout, QWidget, QStatusBar, QApplication,
@@ -368,6 +369,8 @@ class MainWindow(QMainWindow):
 
         # 드롭다운 메뉴 추가
         help_menu = QMenu(self.help_button)
+        manual_action = help_menu.addAction("사용설명서 열기")
+        manual_action.triggered.connect(self.open_user_manual)
         about_action = help_menu.addAction("정보(About)")
         about_action.triggered.connect(self.show_about_dialog)
         self.help_button.setMenu(help_menu)
@@ -1106,6 +1109,43 @@ class MainWindow(QMainWindow):
         self.sub_heading_widget.raise_() # 헤딩 서브 위젯 올리기
         self.sub_format_widget.raise_() # 포맷 서브 위젯을 가장 위로 올리기
 
+
+    def open_user_manual(self):
+        """사용설명서 PDF 파일을 기본 웹 브라우저로 엽니다."""
+        try:
+            # 여러 경로에서 PDF 파일 찾기
+            possible_paths = [
+                os.path.join(BASE_PATH, "MD2HWP 사용설명서.pdf"),  # 기본 경로
+                os.path.join(os.path.dirname(BASE_PATH), "MD2HWP 사용설명서.pdf"),  # 상위 폴더
+                os.path.join(os.path.dirname(os.path.dirname(__file__)), "..", "..", "MD2HWP 사용설명서.pdf"),  # 프로젝트 루트
+            ]
+            
+            manual_path = None
+            for path in possible_paths:
+                if os.path.exists(path):
+                    manual_path = path
+                    break
+            
+            if not manual_path:
+                self.status_handler.set_error("사용설명서 파일을 찾을 수 없습니다.")
+                QMessageBox.warning(self, "파일 없음", 
+                                  f"사용설명서 파일을 찾을 수 없습니다.\n\n확인한 경로들:\n" + 
+                                  "\n".join(f"• {path}" for path in possible_paths) + 
+                                  "\n\n설치 폴더에 'MD2HWP 사용설명서.pdf' 파일이 있는지 확인해주세요.")
+                return
+            
+            # 파일 경로를 웹 브라우저에서 열 수 있는 URL 형식으로 변환
+            file_url = f"file:///{manual_path.replace(os.sep, '/')}"
+            
+            # 기본 웹 브라우저로 PDF 열기
+            webbrowser.open(file_url)
+            self.status_handler.set_success("사용설명서를 열었습니다.", timeout=3000)
+            
+        except Exception as e:
+            self.status_handler.set_error(f"사용설명서 열기 실패: {str(e)}")
+            QMessageBox.critical(self, "오류", 
+                               f"사용설명서를 여는 중 오류가 발생했습니다:\n\n{str(e)}\n\n"
+                               "시스템에 PDF 뷰어가 설치되어 있는지 확인해주세요.")
 
     def show_about_dialog(self):
         """
