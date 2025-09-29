@@ -77,7 +77,21 @@ class TemplateManager:
                 print(f"템플릿 디렉토리 생성: {self.default_template_dir}")
             except Exception as e:
                 print(f"템플릿 디렉토리 생성 실패: {e}")
+
+        self._reset_dynamic_template_caches()
     
+    def _reset_dynamic_template_caches(self):
+        """Reset caches that depend on the currently loaded template."""
+        self.template_styles = {key: None for key in self.style_mapping_order}
+        self.special_formats = {}
+        self.list_special_formats = {}
+        self.list_special_formats_levels = {}
+        self.list_level_styles = {}
+        self.bullet_symbol_levels = {}
+        self.margin_para_shapes = {}
+        self.sec_def_content = None
+        self.bullet_symbol = DEFAULT_BULLET_SYMBOL
+
     def load_template(self, template_path):
         """
         템플릿 로드 (BeautifulSoup 기반으로 수정)
@@ -93,6 +107,8 @@ class TemplateManager:
             if not body_tag:
                 print("템플릿 로드 오류: BODY 태그를 찾을 수 없습니다.")
                 return False
+
+            self._reset_dynamic_template_caches()
 
             p_tag_with_secdef = next((p for p in body_tag.find_all('P') if p.find('SECDEF')), None)
             
@@ -150,10 +166,16 @@ class TemplateManager:
         # 서식 스타일 매핑 초기화
         self.template_styles = {key: None for key in self.style_mapping_order}
         
+        # Populate list styles using sample paragraphs inside the section
+        self._populate_list_sample_styles(section)
+        
         # 순서대로 마크다운 요소에 매핑
         for idx, tag_structure in enumerate(balanced_p_tags):
             if idx < len(self.style_mapping_order):
                 style_key = self.style_mapping_order[idx]
+
+                if self.template_styles.get(style_key):
+                    continue
 
                 # 특수 문자 자동 번호가 있는지 확인
                 has_special_char_numbering = False
@@ -209,7 +231,7 @@ class TemplateManager:
                         self.bullet_symbol_levels.setdefault(level_index, DEFAULT_BULLET_SYMBOL)
     
     def _extract_bullet_symbol(self, structure):
-        """리스트 스타일 템플릿에서 불릿 기호 추출"""
+        """순서 없는 리스트 구조에서 글머리표 특수기호 추출"""
         char_pattern = re.compile(r'<CHAR>(.*?)</CHAR>', re.DOTALL)
         match = char_pattern.search(structure)
 
@@ -229,7 +251,94 @@ class TemplateManager:
             return match_symbol.group(0)
 
         return None
-    
+
+    def _populate_list_sample_styles(self, section):
+        """Populate list level styles by sampling bullet paragraphs in the template section."""
+        if not section:
+            return
+
+        bullet_candidates = []
+
+        for p in section.find_all('P'):
+            text = p.get_text()
+            if not text:
+                continue
+            stripped = text.strip()
+            if not stripped:
+                continue
+            if not stripped[0].isalnum():
+                bullet_candidates.append(p)
+
+        self._apply_list_candidates(bullet_candidates)
+
+    def _apply_list_candidates(self, candidates):
+        max_levels = 3
+        level = 0
+        for p in candidates:
+            if level >= max_levels:
+                break
+            if p.find('SECDEF') or p.find('COLDEF'):
+                continue
+
+            structure = str(p)
+            bullet_char_shape, text_char_shape, bullet_symbol = self._extract_list_char_shapes(p)
+            if text_char_shape is None:
+                continue
+            para_shape = p.get('ParaShape', '0')
+
+            if bullet_symbol:
+                self.bullet_symbol_levels[level] = bullet_symbol
+
+            style_key = f'ul{level + 1}'
+            entry = {
+                'structure': structure,
+                'para_shape': para_shape,
+                'bullet_char_shape': bullet_char_shape or self._extract_char_shape(structure),
+                'text_char_shape': text_char_shape or self._extract_char_shape(structure)
+            }
+            self.list_level_styles[level] = entry
+
+            char_shape = self._extract_char_shape(structure)
+            self.template_styles[style_key] = {
+                'structure': structure,
+                'para_shape': para_shape,
+                'char_shape': char_shape,
+                'bullet_char_shape': entry['bullet_char_shape'],
+                'text_char_shape': entry['text_char_shape'],
+                'has_table': '<TABLE' in structure,
+                'has_field': '<FIELDBEGIN' in structure,
+                'has_special_char_numbering': False
+            }
+
+            level += 1
+
+    def _extract_list_char_shapes(self, p_tag):
+        """Extract char shapes for bullet and text fragments from a sample paragraph."""
+        bullet_char_shape = None
+        text_char_shape = None
+        bullet_symbol = None
+
+        for text_tag in p_tag.find_all('TEXT'):
+            char_shape = text_tag.get('CharShape')
+            for char_node in text_tag.find_all('CHAR'):
+                content = char_node.text
+                stripped = content.strip()
+                if not stripped:
+                    continue
+                first_char = stripped[0]
+                if bullet_symbol is None and not first_char.isalnum():
+                    bullet_symbol = first_char
+                    bullet_char_shape = char_shape
+                else:
+                    if text_char_shape is None:
+                        text_char_shape = char_shape
+                if bullet_symbol and text_char_shape:
+                    break
+            if bullet_symbol and text_char_shape:
+                break
+
+        return bullet_char_shape, text_char_shape, bullet_symbol
+
     def _extract_balanced_p_tags(self, content):
         """균형 잡힌 P 태그 쌍을 순서대로 추출"""
         elements = []

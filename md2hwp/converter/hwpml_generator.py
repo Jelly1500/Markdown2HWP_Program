@@ -34,26 +34,22 @@ class HWPMLGenerator:
             first_body_p = body_soup.find('P')
 
             if secdef_p and first_body_p:
-                # 본문의 첫 P 태그에서 TEXT 태그 안의 모든 자식들을 추출
-                first_body_text = first_body_p.find('TEXT')
-                if first_body_text:
+                text_nodes = first_body_p.find_all('TEXT')
+                if len(text_nodes) == 1:
+                    first_body_text = text_nodes[0]
                     children_to_move = list(first_body_text.children)
-                    
-                    # SECDEF P 태그의 TEXT 태그에 자식들을 옮김
+
                     secdef_text = secdef_p.find('TEXT')
                     if secdef_text:
-                        # 기존에 있던 빈 CHAR 태그는 제거
                         empty_char = secdef_text.find('CHAR', string=' ')
                         if empty_char:
                             empty_char.decompose()
 
                         for child in children_to_move:
                             secdef_text.append(child.extract())
-                        
-                        # 내용이 옮겨진 첫 P 태그는 제거
+
                         first_body_p.decompose()
-                        
-                        # 최종 hwpml_body 구성
+
                         hwpml_body = str(secdef_p) + "".join(str(child) for child in body_soup.BODY_ROOT.children)
                     else:
                         hwpml_body = saved_defs + hwpml_body # Fallback
