@@ -211,7 +211,7 @@ class HWPMLGenerator:
                 hwpml += f'<TEXT CharShape="{current_shape}"><CHAR><LINEBREAK/></CHAR></TEXT>'
                 continue
             
-            content = fragment['content'].replace('&', '&amp;')
+            content = fragment['content'].replace('&', '&amp;').replace('<TAB/>', '    ')
             
             if fragment_type == 'text':
                 new_shape = normal_char_shape
@@ -255,6 +255,9 @@ class HWPMLGenerator:
         """텍스트를 템플릿의 CHAR 태그 내에 삽입"""
         # & 문자를 &amp;로 변환
         text = text.replace('&', '&amp;')
+        
+        # <TAB/> 태그를 공백 4개로 치환
+        text = text.replace('<TAB/>', '    ')
         
         # 특수 문자 처리 (스타일 키를 직접 사용)
         template = self.special_char_handler.process_special_chars_in_template(template, style_key)

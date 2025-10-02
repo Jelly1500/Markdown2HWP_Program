@@ -483,6 +483,9 @@ class MainWindow(QMainWindow):
                     return False
                 file_path = hml_path
 
+            # 템플릿 파일 내의 <TAB/> 태그를 공백 4개로 치환
+            self._replace_tab_tags_in_template_file(file_path)
+            
             success = self.converter.load_template(file_path)
             if success:
                 self.template_path = file_path
@@ -504,6 +507,27 @@ class MainWindow(QMainWindow):
             self.status_handler.set_error(f"템플릿 로드 실패: {e}")
             self.update_template_button_icon(self.icon_paths['default_template'])
             return False
+
+    def _replace_tab_tags_in_template_file(self, file_path):
+        """템플릿 파일 내의 모든 <TAB/> 태그를 공백 4개로 치환"""
+        try:
+            # 파일 읽기
+            with open(file_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            
+            # <TAB/> 태그를 공백 4개로 치환
+            original_content = content
+            content = content.replace('<TAB/>', '    ')
+            
+            # 변경사항이 있으면 파일에 다시 저장
+            if content != original_content:
+                with open(file_path, 'w', encoding='utf-8') as f:
+                    f.write(content)
+                print(f"템플릿 파일에서 <TAB/> 태그를 공백 4개로 치환했습니다: {file_path}")
+            
+        except Exception as e:
+            print(f"템플릿 파일 TAB 태그 치환 중 오류 발생: {e}")
+            # 오류가 발생해도 템플릿 로드는 계속 진행
 
     def get_template_icon_path(self, template_path):
         """템플릿 경로에 해당하는 아이콘 이미지 경로를 반환합니다."""

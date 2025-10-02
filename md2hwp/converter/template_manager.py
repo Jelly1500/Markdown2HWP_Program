@@ -140,6 +140,9 @@ class TemplateManager:
                     print("내용이 없는 SECDEF 문단을 완전히 제거했습니다.")
             
             # 이제 soup 객체는 SECDEF/COLDEF가 깔끔하게 분리된 상태
+            # 템플릿 내의 모든 <TAB/> 태그를 공백 4개로 치환
+            self._replace_tab_tags_in_soup(soup)
+            
             self._extract_template_styles(soup)
             self._extract_and_clone_charshapes(soup)
             self.add_table_borderfills(soup)
@@ -149,6 +152,19 @@ class TemplateManager:
         except Exception as e:
             print(f"템플릿 로드 오류: {e}")
             return False
+    
+    def _replace_tab_tags_in_soup(self, soup):
+        """BeautifulSoup 객체 내의 모든 <TAB/> 태그를 공백 4개로 치환"""
+        # 모든 CHAR 태그를 찾아서 내용을 확인하고 <TAB/> 태그를 치환
+        for char_tag in soup.find_all('CHAR'):
+            if char_tag.string and '<TAB/>' in char_tag.string:
+                char_tag.string = char_tag.string.replace('<TAB/>', '    ')
+        
+        # TEXT 태그 내의 텍스트 노드에서도 <TAB/> 태그를 치환
+        for text_tag in soup.find_all('TEXT'):
+            for content in text_tag.contents:
+                if hasattr(content, 'string') and content.string and '<TAB/>' in content.string:
+                    content.string = content.string.replace('<TAB/>', '    ')
     
     def _extract_template_styles(self, soup):
         """템플릿에서 순서대로 서식 스타일 추출"""
@@ -190,8 +206,11 @@ class TemplateManager:
                     if has_special_char_numbering:
                         break
 
+                # 구조에서 <TAB/> 태그를 공백 4개로 치환
+                cleaned_tag_structure = tag_structure.replace('<TAB/>', '    ')
+                
                 self.template_styles[style_key] = {
-                    'structure': tag_structure,
+                    'structure': cleaned_tag_structure,
                     'para_shape': self._extract_para_shape(tag_structure),
                     'char_shape': self._extract_char_shape(tag_structure),
                     'has_table': '<TABLE' in tag_structure,
@@ -217,7 +236,7 @@ class TemplateManager:
                         level_index = 0
 
                     self.list_level_styles[level_index] = {
-                        'structure': tag_structure,
+                        'structure': cleaned_tag_structure,
                         'para_shape': self.template_styles[style_key]['para_shape'],
                         'bullet_char_shape': bullet_char_shape,
                         'text_char_shape': text_char_shape
@@ -239,7 +258,8 @@ class TemplateManager:
             return None
 
         content = match.group(1)
-        # remove inline tags such as <TAB/> before extracting the symbol
+        # <TAB/> 태그를 공백 4개로 치환한 후 다른 inline 태그 제거
+        content = content.replace('<TAB/>', '    ')
         content = re.sub(r'<[^>]+>', '', content)
         content = content.strip()
 
@@ -280,7 +300,7 @@ class TemplateManager:
             if p.find('SECDEF') or p.find('COLDEF'):
                 continue
 
-            structure = str(p)
+            structure = str(p).replace('<TAB/>', '    ')
             bullet_char_shape, text_char_shape, bullet_symbol, prefix_text = self._extract_list_char_shapes(p)
             if text_char_shape is None:
                 continue
@@ -383,6 +403,8 @@ class TemplateManager:
             
             if open_tags == close_tags:
                 element = content[p_start:search_idx]
+                # <TAB/> 태그를 공백 4개로 치환
+                element = element.replace('<TAB/>', '    ')
                 elements.append(element)
                 start_idx = search_idx
             else:
@@ -846,6 +868,8 @@ class TemplateManager:
                 try:
                     index = int(line_num_str) - 1
                     if 0 <= index < len(p_tag_strings):
+                        # <TAB/> 태그를 공백 4개로 치환
+                        p_tag_str = p_tag_str.replace('<TAB/>', '    ')
                         p_tag_strings[index] = p_tag_str
                 except (ValueError, TypeError):
                     continue
