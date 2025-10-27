@@ -2,6 +2,7 @@
 마크다운 텍스트를 구조화된 요소로 파싱하는 모듈
 """
 import re
+import os
 import mistune
 import emoji  # 👈 [수정] emoji 라이브러리 import
 from bs4 import BeautifulSoup, NavigableString
@@ -67,9 +68,15 @@ class MarkdownParser:
         # 3. HTML로 변환
         html = self.parser.html(processed_md_text)
 
-        # 4. 디버깅을 위한 HTML 파일 저장
-        with open("converted.html", "w", encoding="utf-8") as f:
-            f.write(html)
+        # 4. 디버깅을 위한 HTML 파일 저장 (환경 변수로 제어)
+        # 보안: 프로덕션 환경에서는 디버그 파일 생성 방지
+        if os.getenv('MD2HWP_DEBUG', 'False').lower() == 'true':
+            try:
+                with open("converted.html", "w", encoding="utf-8") as f:
+                    f.write(html)
+                print("DEBUG [MarkdownParser]: converted.html 파일이 생성되었습니다.")
+            except Exception as e:
+                print(f"DEBUG [MarkdownParser]: 디버그 파일 생성 실패: {e}")
 
         # 5. HTML 파싱 및 요소 추출
         soup = BeautifulSoup(html, 'html.parser')
