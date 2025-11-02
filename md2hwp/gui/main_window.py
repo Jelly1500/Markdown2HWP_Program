@@ -1048,11 +1048,87 @@ class MainWindow(QMainWindow):
         # 상태 초기화
         self.reset_format_change_state()
 
+    def compute_toolbar_top_margin(self) -> int:
+        """에디터 안에 올려둔 버튼줄 높이만큼 위쪽 마진 계산"""
+        top_line = 5  # on_text_edit_resize에서 버튼 y 시작값
+        h = max(self.heading_button_container.height(),
+                self.format_button_container.height())
+        return top_line + h + 16  # 버튼줄과 텍스트 사이 여백(16px)
+
+    def apply_editor_top_margin(self):
+        """텍스트가 버튼줄 아래에서 시작되도록 viewport 상단 마진 적용"""
+        top_margin = self.compute_toolbar_top_margin()
+        self.text_edit.setViewportMargins(0, top_margin, 0, 0)
+
+        if not hasattr(self, "toolbar_divider"):
+            from PySide6.QtWidgets import QWidget
+            self.toolbar_divider = QWidget(self.text_edit)
+            self.toolbar_divider.setObjectName("ToolbarDivider")
+
+            # 구분선 진하게(30%~40%)
+            self.toolbar_divider.setStyleSheet("""
+                    #ToolbarDivider {
+                        background-color: rgba(0,0,0,0.35);
+                    }
+                """)
+            self.toolbar_divider.show()
+
+            # 구분선 위치/크기 갱신
+        vp = self.text_edit.viewport().geometry()
+        self.toolbar_divider.setGeometry(vp.x(), vp.y() -6, vp.width(), 2)
+        self.toolbar_divider.raise_()
+
+        # 스크롤바 시작을 구분선 아래로 밀어냄
+        sb = self.text_edit.verticalScrollBar()
+        sb.setStyleSheet(
+            f"""
+                /* 스크롤바 프레임(위쪽을 구분선 아래로 내림) */
+                QScrollBar:vertical {{
+                    margin: {vp.y()}px 0 0 0;
+                    width: 6px;                 /* 필요시 조절 */
+                    background: transparent;     /* 전체 배경 제거 */
+                    border: none;
+                }}
+
+                /* 트랙(뒤 흰 세로 영역) - 모든 상태에서 투명 고정 */
+                QScrollBar::groove:vertical,
+                QScrollBar::groove:vertical:hover,
+                QScrollBar::groove:vertical:pressed,
+                QScrollBar::add-page:vertical,
+                QScrollBar::add-page:vertical:hover,
+                QScrollBar::add-page:vertical:pressed,
+                QScrollBar::sub-page:vertical,
+                QScrollBar::sub-page:vertical:hover,
+                QScrollBar::sub-page:vertical:pressed {{
+                    background: transparent;
+                    border: none;
+                }}
+
+                /* 손잡이(회색 막대) */
+                QScrollBar::handle:vertical {{
+                    background: rgba(0,0,0,0.35);
+                    border-radius: 2px;
+                    min-height: 24px;
+                }}
+                QScrollBar::handle:vertical:hover {{
+                    background: rgba(0,0,0,0.45); 
+                }}
+
+                /* 위/아래 화살표 버튼 제거 */
+                QScrollBar::add-line:vertical,
+                QScrollBar::sub-line:vertical {{
+                    height: 0;
+                    width: 0;
+                    border: none;
+                    background: transparent;
+                }}
+            """
+        )
 
     def setup_heading_buttons_in_editor(self):
         """텍스트 편집기 내부에 헤딩 및 포맷 버튼 그룹들을 배치합니다."""
         # 위젯은 이미 생성되어 있으므로 텍스트 편집기에 추가만 함
-        self.text_edit.setContentsMargins(10, 70, 10, 10)  # 상단 여백 확보 (두 줄 버튼 고려)
+        self.text_edit.setContentsMargins(10, 10, 10, 10)  # 상단 여백 확보 (두 줄 버튼 고려)
 
         # 헤딩 버튼 컨테이너 위치 설정 (우측 상단)
         self.heading_button_container.setParent(self.text_edit)
@@ -1076,7 +1152,7 @@ class MainWindow(QMainWindow):
         self.text_edit.resizeEvent = self.on_text_edit_resize
         # 초기 위치 설정 호출
         QTimer.singleShot(0, lambda: self.on_text_edit_resize(None))
-
+        QTimer.singleShot(0, self.apply_editor_top_margin)
 
     def on_text_edit_resize(self, event):
         """텍스트 편집기 크기 변경 시 버튼 위치를 조정합니다."""
@@ -1133,6 +1209,8 @@ class MainWindow(QMainWindow):
         self.sub_heading_widget.raise_() # 헤딩 서브 위젯 올리기
         self.sub_format_widget.raise_() # 포맷 서브 위젯을 가장 위로 올리기
 
+        # 버튼 위치가 정해진 뒤에 상단 마진 갱신
+        self.apply_editor_top_margin()
 
     def open_user_manual(self):
         """사용설명서 PDF 파일을 기본 웹 브라우저로 엽니다."""
