@@ -19,6 +19,13 @@ try:
 except ImportError:
     QTimer = None # PySide6가 없는 환경 대비
 
+# 커스텀 예외 import
+try:
+    from ..exceptions import FileAccessError, FileSaveError
+except ImportError:
+    # 독립 실행 시 대체
+    from md2hwp.exceptions import FileAccessError, FileSaveError
+
 explorer_handles = {
     'output': None,  # 한글 문서 경로용
     'template': None  # 템플릿 경로용
@@ -72,29 +79,64 @@ def generate_output_filename(output_dir, prefix="converted", extension=".hml"):
     return os.path.join(output_dir, f"{prefix}_{timestamp}{extension}")
 
 def save_text_file(file_path, content, encoding="utf-8"):
-    """텍스트 파일 저장"""
+    """텍스트 파일 저장
+
+    Args:
+        file_path: 저장할 파일 경로
+        content: 저장할 내용
+        encoding: 파일 인코딩 (기본: utf-8)
+
+    Returns:
+        str: 실제로 저장된 파일 경로 (대체 경로일 수 있음)
+
+    Raises:
+        FileSaveError: 모든 시도가 실패한 경우
+    """
     try:
         with io.open(file_path, "w", encoding=encoding) as f:
             f.write(content)
         return file_path
     except PermissionError:
         # 권한 문제가 발생한 경우 사용자 문서 폴더에 저장 시도
-        user_docs = get_user_documents_path()
-        alt_path = os.path.join(user_docs, "마크다운_HWP_변환기", os.path.basename(file_path))
-        os.makedirs(os.path.dirname(alt_path), exist_ok=True)
-        with io.open(alt_path, "w", encoding=encoding) as f:
-            f.write(content)
-        print(f"원본 경로에 저장할 수 없어 대체 경로에 저장했습니다: {alt_path}")
-        return alt_path
+        try:
+            user_docs = get_user_documents_path()
+            alt_path = os.path.join(user_docs, "마크다운_HWP_변환기", os.path.basename(file_path))
+            os.makedirs(os.path.dirname(alt_path), exist_ok=True)
+            with io.open(alt_path, "w", encoding=encoding) as f:
+                f.write(content)
+            print(f"원본 경로에 저장할 수 없어 대체 경로에 저장했습니다: {alt_path}")
+            return alt_path
+        except Exception as fallback_error:
+            raise FileSaveError(
+                file_path,
+                f"권한 오류 및 대체 경로 저장 실패: {str(fallback_error)}"
+            )
+    except UnicodeEncodeError as e:
+        raise FileSaveError(
+            file_path,
+            f"인코딩 오류: {encoding} 형식으로 저장할 수 없는 문자가 포함되어 있습니다"
+        )
+    except OSError as e:
+        if e.errno == 28:  # No space left on device
+            raise FileSaveError(file_path, "디스크 공간이 부족합니다")
+        elif e.errno == 36:  # File name too long
+            raise FileSaveError(file_path, "파일 이름이 너무 깁니다")
+        else:
+            raise FileSaveError(file_path, f"파일 시스템 오류: {str(e)}")
     except Exception as e:
-        print(f"파일 저장 오류: {e}")
-        # 임시 폴더에 저장 시도
-        temp_path = os.path.join(os.path.expanduser("~"), "AppData", "Local", "Temp", "마크다운_HWP_변환기", os.path.basename(file_path))
-        os.makedirs(os.path.dirname(temp_path), exist_ok=True)
-        with io.open(temp_path, "w", encoding=encoding) as f:
-            f.write(content)
-        print(f"임시 폴더에 저장했습니다: {temp_path}")
-        return temp_path
+        # 임시 폴더에 저장 시도 (최후의 수단)
+        try:
+            temp_path = os.path.join(os.path.expanduser("~"), "AppData", "Local", "Temp", "마크다운_HWP_변환기", os.path.basename(file_path))
+            os.makedirs(os.path.dirname(temp_path), exist_ok=True)
+            with io.open(temp_path, "w", encoding=encoding) as f:
+                f.write(content)
+            print(f"임시 폴더에 저장했습니다: {temp_path}")
+            return temp_path
+        except Exception as final_error:
+            raise FileSaveError(
+                file_path,
+                f"모든 저장 시도 실패. 원본 오류: {str(e)}, 임시 저장 오류: {str(final_error)}"
+            )
 
 def open_file(file_path):
     """파일 열기 시도"""

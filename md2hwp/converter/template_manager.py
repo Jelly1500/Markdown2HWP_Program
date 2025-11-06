@@ -4,6 +4,10 @@ HWPML 템플릿 관리 모듈
 import re
 from bs4 import BeautifulSoup, NavigableString
 from ..config import STYLE_MAPPING_ORDER, DEFAULT_BULLET_SYMBOL, PARAGRAPH_FORMAT_SETTINGS
+from ..exceptions import (
+    TemplateNotFoundError, TemplateLoadError, TemplateMalformedError,
+    TemplateStyleNotFoundError
+)
 from .special_char import SpecialCharHandler
 import os
 
@@ -96,62 +100,104 @@ class TemplateManager:
         """
         템플릿 로드 (BeautifulSoup 기반으로 수정)
         - SECDEF와 실제 내용(표 등)이 한 P 태그에 섞인 경우를 처리하도록 개선
+
+        Args:
+            template_path: 로드할 HML 템플릿 파일 경로
+
+        Returns:
+            bool: 로드 성공 여부
+
+        Raises:
+            TemplateNotFoundError: 템플릿 파일을 찾을 수 없음
+            TemplateLoadError: 템플릿 파일 읽기 실패
+            TemplateMalformedError: 템플릿 구조가 올바르지 않음
         """
+        # 파일 존재 여부 확인
+        if not os.path.exists(template_path):
+            raise TemplateNotFoundError(template_path)
+
         try:
             with open(template_path, 'r', encoding='utf-8') as f:
                 content = f.read()
+        except UnicodeDecodeError as e:
+            raise TemplateLoadError(
+                template_path,
+                f"파일 인코딩 오류: UTF-8 형식이 아닙니다 ({str(e)})"
+            )
+        except PermissionError:
+            raise TemplateLoadError(
+                template_path,
+                "파일 접근 권한이 없습니다"
+            )
+        except Exception as e:
+            raise TemplateLoadError(
+                template_path,
+                f"파일 읽기 실패: {str(e)}"
+            )
+
+        try:
             soup = BeautifulSoup(content, 'xml')
+        except Exception as e:
+            raise TemplateLoadError(
+                template_path,
+                f"XML 파싱 실패: {str(e)}"
+            )
 
-            # BODY 태그 내에서 SECDEF를 포함한 P 태그 검색
-            body_tag = soup.find('BODY')
-            if not body_tag:
-                print("템플릿 로드 오류: BODY 태그를 찾을 수 없습니다.")
-                return False
+        # BODY 태그 내에서 SECDEF를 포함한 P 태그 검색
+        body_tag = soup.find('BODY')
+        if not body_tag:
+            raise TemplateMalformedError('BODY', template_path)
 
-            self._reset_dynamic_template_caches()
+        self._reset_dynamic_template_caches()
 
-            p_tag_with_secdef = next((p for p in body_tag.find_all('P') if p.find('SECDEF')), None)
-            
-            if p_tag_with_secdef:
-                # 1. SECDEF와 COLDEF 태그를 원본 P 태그에서 '추출' (제거하고 반환받음)
-                secdef_tag = p_tag_with_secdef.find('SECDEF').extract()
-                coldef_tag = p_tag_with_secdef.find('COLDEF')
-                if coldef_tag:
-                    coldef_tag = coldef_tag.extract()
+        p_tag_with_secdef = next((p for p in body_tag.find_all('P') if p.find('SECDEF')), None)
 
-                # 2. 추출한 태그들을 보관용 새 P 태그에 담기
-                clean_p_for_storage = soup.new_tag('P', **p_tag_with_secdef.attrs)
-                original_text_tag = p_tag_with_secdef.find('TEXT')
-                text_attrs = original_text_tag.attrs if original_text_tag else {}
-                new_text_tag = soup.new_tag('TEXT', **text_attrs)
-                
-                new_text_tag.append(secdef_tag)
-                if coldef_tag:
-                    new_text_tag.append(coldef_tag)
-                new_text_tag.append(soup.new_tag('CHAR', string=' '))
-                clean_p_for_storage.append(new_text_tag)
-                
-                self.sec_def_content = str(clean_p_for_storage)
-                print("편집 용지(SECDEF)를 포함한 문단 설정을 성공적으로 분리/정리하여 저장했습니다.")
+        if p_tag_with_secdef:
+            # 1. SECDEF와 COLDEF 태그를 원본 P 태그에서 '추출' (제거하고 반환받음)
+            secdef_tag = p_tag_with_secdef.find('SECDEF').extract()
+            coldef_tag = p_tag_with_secdef.find('COLDEF')
+            if coldef_tag:
+                coldef_tag = coldef_tag.extract()
 
-                # 3. 원본 P 태그에 더 이상 유의미한 내용이 없으면 완전히 제거
-                if not p_tag_with_secdef.get_text(strip=True) and not p_tag_with_secdef.find(['TABLE', 'PICTURE']):
-                    p_tag_with_secdef.decompose()
-                    print("내용이 없는 SECDEF 문단을 완전히 제거했습니다.")
-            
+            # 2. 추출한 태그들을 보관용 새 P 태그에 담기
+            clean_p_for_storage = soup.new_tag('P', **p_tag_with_secdef.attrs)
+            original_text_tag = p_tag_with_secdef.find('TEXT')
+            text_attrs = original_text_tag.attrs if original_text_tag else {}
+            new_text_tag = soup.new_tag('TEXT', **text_attrs)
+
+            new_text_tag.append(secdef_tag)
+            if coldef_tag:
+                new_text_tag.append(coldef_tag)
+            new_text_tag.append(soup.new_tag('CHAR', string=' '))
+            clean_p_for_storage.append(new_text_tag)
+
+            self.sec_def_content = str(clean_p_for_storage)
+            print("편집 용지(SECDEF)를 포함한 문단 설정을 성공적으로 분리/정리하여 저장했습니다.")
+
+            # 3. 원본 P 태그에 더 이상 유의미한 내용이 없으면 완전히 제거
+            if not p_tag_with_secdef.get_text(strip=True) and not p_tag_with_secdef.find(['TABLE', 'PICTURE']):
+                p_tag_with_secdef.decompose()
+                print("내용이 없는 SECDEF 문단을 완전히 제거했습니다.")
+
+        try:
             # 이제 soup 객체는 SECDEF/COLDEF가 깔끔하게 분리된 상태
             # 템플릿 내의 모든 <TAB/> 태그를 공백 4개로 치환
             self._replace_tab_tags_in_soup(soup)
-            
+
             self._extract_template_styles(soup)
             self._extract_and_clone_charshapes(soup)
             self.add_table_borderfills(soup)
             self.template_content = str(soup)
-            
+
             return True
+        except (TemplateMalformedError, TemplateStyleNotFoundError):
+            # 이미 우리가 정의한 예외는 그대로 전파
+            raise
         except Exception as e:
-            print(f"템플릿 로드 오류: {e}")
-            return False
+            raise TemplateLoadError(
+                template_path,
+                f"템플릿 처리 중 오류: {str(e)}"
+            )
     
     def _replace_tab_tags_in_soup(self, soup):
         """BeautifulSoup 객체 내의 모든 <TAB/> 태그를 공백 4개로 치환"""
@@ -167,14 +213,18 @@ class TemplateManager:
                     content.string = content.string.replace('<TAB/>', '    ')
     
     def _extract_template_styles(self, soup):
-        """템플릿에서 순서대로 서식 스타일 추출"""
+        """템플릿에서 순서대로 서식 스타일 추출
+
+        Raises:
+            TemplateMalformedError: BODY 또는 SECTION 요소가 없음
+        """
         body_section = soup.find('BODY')
         if not body_section:
-            raise ValueError("템플릿에 BODY 섹션이 없습니다")
-        
+            raise TemplateMalformedError('BODY')
+
         section = body_section.find('SECTION')
         if not section:
-            raise ValueError("템플릿에 SECTION 요소가 없습니다")
+            raise TemplateMalformedError('SECTION')
         
         # 모든 균형 잡힌 P 태그 구조 순서대로 추출
         balanced_p_tags = self._extract_balanced_p_tags(str(section))
@@ -423,18 +473,22 @@ class TemplateManager:
         return match.group(1) if match else "0"
     
     def _extract_and_clone_charshapes(self, soup):
-        """템플릿에서 CharShape을 추출하고 특별 서식이 적용된 복제본 생성 (단락/리스트 분리)"""
+        """템플릿에서 CharShape을 추출하고 특별 서식이 적용된 복제본 생성 (단락/리스트 분리)
+
+        Raises:
+            TemplateMalformedError: 필요한 CHARSHAPE 요소가 없음
+        """
         docinfo = soup.find('MAPPINGTABLE')
         if not docinfo:
-            raise ValueError("템플릿에 DOCINFO 섹션이 없습니다")
+            raise TemplateMalformedError('MAPPINGTABLE')
 
         charshapepool = docinfo.find('CHARSHAPELIST')
         if not charshapepool:
-            raise ValueError("템플릿에 CHARSHAPEPOOL 섹션이 없습니다")
+            raise TemplateMalformedError('CHARSHAPELIST')
 
         all_charshapes = charshapepool.find_all('CHARSHAPE')
         if not all_charshapes:
-            raise ValueError("템플릿에 CHARSHAPE 정의가 없습니다")
+            raise TemplateMalformedError('CHARSHAPE')
 
         last_id = max(int(cs.get('Id', '0')) for cs in all_charshapes)
 
